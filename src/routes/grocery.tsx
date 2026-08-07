@@ -12,7 +12,7 @@ import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/grocery")({
   validateSearch: (search: Record<string, unknown>) => ({
-    week: Number(search.week ?? 0) || 0,
+    week: Number(search["week"] ?? 0) || 0,
   }),
   head: () => ({
     meta: [

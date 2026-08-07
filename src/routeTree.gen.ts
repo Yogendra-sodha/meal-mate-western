@@ -13,6 +13,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as GroceryRouteImport } from './routes/grocery'
 import { Route as PantryRouteImport } from './routes/pantry'
 import { Route as PlannerRouteImport } from './routes/planner'
+import { Route as StatsRouteImport } from './routes/stats'
 import { Route as RecipesIndexRouteImport } from './routes/recipes.index'
 import { Route as RecipesRecipeIdRouteImport } from './routes/recipes.$recipeId'
 
@@ -36,6 +37,11 @@ const PlannerRoute = PlannerRouteImport.update({
   path: '/planner',
   getParentRoute: () => rootRouteImport,
 } as any)
+const StatsRoute = StatsRouteImport.update({
+  id: '/stats',
+  path: '/stats',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const RecipesIndexRoute = RecipesIndexRouteImport.update({
   id: '/recipes/',
   path: '/recipes/',
@@ -52,6 +58,7 @@ export interface FileRoutesByFullPath {
   '/grocery': typeof GroceryRoute
   '/pantry': typeof PantryRoute
   '/planner': typeof PlannerRoute
+  '/stats': typeof StatsRoute
   '/recipes/$recipeId': typeof RecipesRecipeIdRoute
   '/recipes/': typeof RecipesIndexRoute
 }
@@ -60,6 +67,7 @@ export interface FileRoutesByTo {
   '/grocery': typeof GroceryRoute
   '/pantry': typeof PantryRoute
   '/planner': typeof PlannerRoute
+  '/stats': typeof StatsRoute
   '/recipes/$recipeId': typeof RecipesRecipeIdRoute
   '/recipes': typeof RecipesIndexRoute
 }
@@ -69,6 +77,7 @@ export interface FileRoutesById {
   '/grocery': typeof GroceryRoute
   '/pantry': typeof PantryRoute
   '/planner': typeof PlannerRoute
+  '/stats': typeof StatsRoute
   '/recipes/$recipeId': typeof RecipesRecipeIdRoute
   '/recipes/': typeof RecipesIndexRoute
 }
@@ -79,6 +88,7 @@ export interface FileRouteTypes {
     | '/grocery'
     | '/pantry'
     | '/planner'
+    | '/stats'
     | '/recipes/$recipeId'
     | '/recipes/'
   fileRoutesByTo: FileRoutesByTo
@@ -87,6 +97,7 @@ export interface FileRouteTypes {
     | '/grocery'
     | '/pantry'
     | '/planner'
+    | '/stats'
     | '/recipes/$recipeId'
     | '/recipes'
   id:
@@ -95,6 +106,7 @@ export interface FileRouteTypes {
     | '/grocery'
     | '/pantry'
     | '/planner'
+    | '/stats'
     | '/recipes/$recipeId'
     | '/recipes/'
   fileRoutesById: FileRoutesById
@@ -104,6 +116,7 @@ export interface RootRouteChildren {
   GroceryRoute: typeof GroceryRoute
   PantryRoute: typeof PantryRoute
   PlannerRoute: typeof PlannerRoute
+  StatsRoute: typeof StatsRoute
   RecipesRecipeIdRoute: typeof RecipesRecipeIdRoute
   RecipesIndexRoute: typeof RecipesIndexRoute
 }
@@ -138,6 +151,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof PlannerRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/stats': {
+      id: '/stats'
+      path: '/stats'
+      fullPath: '/stats'
+      preLoaderRoute: typeof StatsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/recipes/': {
       id: '/recipes/'
       path: '/recipes'
@@ -160,9 +180,20 @@ const rootRouteChildren: RootRouteChildren = {
   GroceryRoute: GroceryRoute,
   PantryRoute: PantryRoute,
   PlannerRoute: PlannerRoute,
+  StatsRoute: StatsRoute,
   RecipesRecipeIdRoute: RecipesRecipeIdRoute,
   RecipesIndexRoute: RecipesIndexRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
+
+import type { getRouter } from './router.tsx'
+import type { startInstance } from './start.ts'
+declare module '@tanstack/react-start' {
+  interface Register {
+    ssr: true
+    router: Awaited<ReturnType<typeof getRouter>>
+    config: Awaited<ReturnType<typeof startInstance.getOptions>>
+  }
+}

@@ -35,7 +35,7 @@ export interface Ingredient {
   unit: string;
   category: Category;
   /** staple items usually already in the pantry */
-  staple?: boolean;
+  staple?: boolean | undefined;
 }
 
 export interface Recipe {
@@ -60,8 +60,8 @@ export interface DayPlan {
   date: string;
   recipeIds: string[];
   servings: number;
-  note?: string;
-  cooked?: boolean;
+  note?: string | undefined;
+  cooked?: boolean | undefined;
 }
 
 export interface Person {
@@ -74,10 +74,10 @@ export type TaskKind = "prep" | "cook" | "chore";
 export interface Task {
   id: string;
   date: string;
-  recipeId?: string;
+  recipeId?: string | undefined;
   kind: TaskKind;
   label: string;
-  assignee?: string;
+  assignee?: string | undefined;
   done: boolean;
 }
 

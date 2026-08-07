@@ -41,7 +41,7 @@ export function toISODate(d: Date) {
 
 export function parseISODate(s: string) {
   const [y, m, d] = s.split("-").map(Number);
-  return new Date(y, (m ?? 1) - 1, d ?? 1);
+  return new Date(y ?? 1970, (m ?? 1) - 1, d ?? 1);
 }
 
 export function startOfWeek(d: Date, weekStartsOn = 1) {
@@ -71,13 +71,13 @@ export function shortDayLabel(iso: string) {
 
 /** Suggest a recipe for a date, respecting the weekday theme and avoiding recent repeats. */
 export function suggestForDate(iso: string, avoid: string[], favorites: string[] = []): string {
-  const theme = WEEKDAY_THEMES[parseISODate(iso).getDay()];
+  const theme = WEEKDAY_THEMES[parseISODate(iso).getDay()] ?? WEEKDAY_THEMES[0]!;
   const pool = RECIPES.filter((r) => theme.pick(r) && !avoid.includes(r.id));
   const list = (pool.length ? pool : RECIPES.filter((r) => !avoid.includes(r.id))).slice();
-  if (!list.length) return RECIPES[0].id;
+  if (!list.length) return RECIPES[0]!.id;
   const favoured = list.filter((r) => favorites.includes(r.id));
   const from = favoured.length && Math.random() > 0.5 ? favoured : list;
-  return from[Math.floor(Math.random() * from.length)].id;
+  return from[Math.floor(Math.random() * from.length)]!.id;
 }
 
 export function generateWeek(dates: string[], state: AppState) {

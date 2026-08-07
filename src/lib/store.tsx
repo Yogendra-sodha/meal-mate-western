@@ -155,8 +155,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             date,
             recipeIds,
             servings: servings ?? prev?.servings ?? d.defaultServings,
-            note: prev?.note,
-            cooked: prev?.cooked,
+            ...(prev?.note !== undefined ? { note: prev.note } : {}),
+            ...(prev?.cooked !== undefined ? { cooked: prev.cooked } : {}),
           };
           d.tasks = d.tasks.filter((t) => t.date !== date);
           return d;
@@ -220,7 +220,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       assignTask: (id, assignee) =>
         update((d) => {
           const t = d.tasks.find((x) => x.id === id);
-          if (t) t.assignee = assignee;
+          if (t) t.assignee = assignee ?? undefined;
           return d;
         }),
       autoAssign: (date) =>
@@ -231,7 +231,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           d.tasks
             .filter((t) => t.date === date)
             .forEach((t) => {
-              t.assignee = people[i % people.length].id;
+              t.assignee = people[i % people.length]!.id;
               i += 1;
             });
           return d;
@@ -267,7 +267,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         update((d) => {
           d.people = d.people.filter((p) => p.id !== id);
           d.tasks.forEach((t) => {
-            if (t.assignee === id) t.assignee = undefined;
+            if (t.assignee === id) delete t.assignee;
           });
           return d;
         }),

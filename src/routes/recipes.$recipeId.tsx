@@ -1,11 +1,28 @@
 import { createFileRoute, Link, notFound } from "@tanstack/react-router";
-import { ArrowLeft, ExternalLink, Heart, Minus, Plus, Star } from "lucide-react";
+import {
+  ArrowLeft,
+  ExternalLink,
+  Heart,
+  Minus,
+  Pencil,
+  Plus,
+  Star,
+  Youtube,
+} from "lucide-react";
 import { useState } from "react";
+import { toast } from "sonner";
 
 import { Screen } from "@/components/app-shell";
+import { RecipeEditor } from "@/components/recipe-editor";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { formatQty, scaleIngredient, toISODate } from "@/lib/planning";
+import {
+  formatQty,
+  formatUpdatedAt,
+  scaleIngredient,
+  toISODate,
+  youtubeLink,
+} from "@/lib/planning";
 import { useStore } from "@/lib/store";
 import { CATEGORIES } from "@/lib/types";
 import { cn } from "@/lib/utils";

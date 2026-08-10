@@ -165,3 +165,23 @@ export function buildGroceryList(
 }
 
 export { RECIPE_INDEX };
+
+/** YouTube walkthrough for a recipe: the saved link, or a search for the dish. */
+export function youtubeLink(recipe: Recipe) {
+  if (recipe.videoUrl?.trim()) return recipe.videoUrl.trim();
+  return `https://www.youtube.com/results?search_query=${encodeURIComponent(
+    `${recipe.title} recipe no onion no garlic`,
+  )}`;
+}
+
+export function formatUpdatedAt(iso?: string) {
+  if (!iso) return null;
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return null;
+  return d.toLocaleString(undefined, {
+    day: "numeric",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}

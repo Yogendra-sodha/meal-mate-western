@@ -109,11 +109,19 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     setState((prev) => fn(structuredClone(prev)));
   }, []);
 
-  const recipes = useMemo(() => [...RECIPES, ...state.customRecipes], [state.customRecipes]);
+  const recipes = useMemo(
+    () =>
+      [...RECIPES, ...state.customRecipes].map((r) => {
+        const patch = state.recipeEdits[r.id];
+        return patch ? ({ ...r, ...patch } as Recipe) : r;
+      }),
+    [state.customRecipes, state.recipeEdits],
+  );
   const recipesById = useMemo(
     () => Object.fromEntries(recipes.map((r) => [r.id, r])),
     [recipes],
   );
+
 
   const value = useMemo<StoreValue>(() => {
     const buildTasksFor = (date: string, draft: AppState): Task[] => {

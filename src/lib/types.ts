@@ -45,6 +45,10 @@ export interface Recipe {
   description: string;
   sourceName: string;
   sourceUrl: string;
+  /** optional YouTube walkthrough */
+  videoUrl?: string | undefined;
+  /** ISO timestamp of the last manual edit */
+  updatedAt?: string | undefined;
   prepMin: number;
   cookMin: number;
   /** all quantities are stated for this many plates */

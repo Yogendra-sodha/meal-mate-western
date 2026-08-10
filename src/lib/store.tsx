@@ -71,6 +71,12 @@ interface StoreValue {
   addPerson: (name: string) => void;
   removePerson: (id: string) => void;
   addRecipe: (recipe: Recipe) => void;
+  updateRecipe: (id: string, patch: Partial<Recipe>) => void;
+  resetRecipe: (id: string) => void;
+  addToCart: (item: Omit<CartItem, "id" | "done" | "addedAt">) => void;
+  toggleCartItem: (id: string) => void;
+  removeCartItem: (id: string) => void;
+  clearCart: () => void;
   reset: () => void;
 }
 

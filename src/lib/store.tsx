@@ -289,7 +289,57 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         }),
       addRecipe: (recipe) =>
         update((d) => {
-          d.customRecipes.push(recipe);
+          d.customRecipes.push({ ...recipe, updatedAt: new Date().toISOString() });
+          return d;
+        }),
+      updateRecipe: (id, patch) =>
+        update((d) => {
+          const custom = d.customRecipes.findIndex((r) => r.id === id);
+          const stamped = { ...patch, updatedAt: new Date().toISOString() };
+          if (custom >= 0) {
+            d.customRecipes[custom] = { ...d.customRecipes[custom]!, ...stamped };
+          } else {
+            d.recipeEdits[id] = { ...(d.recipeEdits[id] ?? {}), ...stamped };
+          }
+          return d;
+        }),
+      resetRecipe: (id) =>
+        update((d) => {
+          delete d.recipeEdits[id];
+          return d;
+        }),
+      addToCart: (item) =>
+        update((d) => {
+          const existing = d.cart.find(
+            (c) =>
+              c.name.toLowerCase() === item.name.toLowerCase() &&
+              c.unit === item.unit &&
+              c.recipeTitle === item.recipeTitle,
+          );
+          if (existing) existing.qty += item.qty;
+          else
+            d.cart.push({
+              ...item,
+              id: `cart-${Date.now()}-${Math.round(Math.random() * 1e6)}`,
+              done: false,
+              addedAt: new Date().toISOString(),
+            });
+          return d;
+        }),
+      toggleCartItem: (id) =>
+        update((d) => {
+          const c = d.cart.find((x) => x.id === id);
+          if (c) c.done = !c.done;
+          return d;
+        }),
+      removeCartItem: (id) =>
+        update((d) => {
+          d.cart = d.cart.filter((c) => c.id !== id);
+          return d;
+        }),
+      clearCart: () =>
+        update((d) => {
+          d.cart = [];
           return d;
         }),
       reset: () => setState(initialState),

@@ -39,6 +39,8 @@ export const initialState: AppState = {
   ratings: {},
   purchased: {},
   customRecipes: [],
+  recipeEdits: {},
+  cart: [],
   cookLog: [],
   defaultServings: 20,
 };

@@ -191,6 +191,29 @@ function RecipeDetail() {
         </TabsList>
 
         <TabsContent value="shopping" className="mt-4 space-y-4">
+          <div className="flex items-center justify-between gap-3 rounded-2xl bg-surface-2 px-4 py-3">
+            <p className="text-sm font-semibold text-muted-foreground">
+              Tap + to send an item to the grocery cart
+            </p>
+            <Button
+              size="sm"
+              className="rounded-full"
+              onClick={() => {
+                ingredients.forEach((i) =>
+                  store.addToCart({
+                    name: i.name,
+                    qty: Math.round(i.qty * 100) / 100,
+                    unit: i.unit,
+                    category: i.category,
+                    recipeTitle: recipe.title,
+                  }),
+                );
+                toast.success(`All items added for ${recipe.title}`);
+              }}
+            >
+              Add all
+            </Button>
+          </div>
           {CATEGORIES.map(({ id, label, emoji }) => {
             const items = ingredients.filter((i) => i.category === id);
             if (!items.length) return null;
@@ -203,7 +226,7 @@ function RecipeDetail() {
                   {items.map((i) => (
                     <li
                       key={i.name}
-                      className="flex items-center justify-between gap-3 border-b border-border px-4 py-2.5 text-sm last:border-0"
+                      className="grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-3 border-b border-border px-4 py-2.5 text-sm last:border-0"
                     >
                       <span className="min-w-0 truncate">
                         {i.name}
@@ -214,10 +237,31 @@ function RecipeDetail() {
                       <span className="shrink-0 font-bold text-primary">
                         {formatQty(i.qty, i.unit)}
                       </span>
+                      <Button
+                        variant="secondary"
+                        size="icon"
+                        className="h-9 w-9 shrink-0 rounded-full"
+                        aria-label={`Add ${i.name} to grocery cart`}
+                        onClick={() => {
+                          store.addToCart({
+                            name: i.name,
+                            qty: Math.round(i.qty * 100) / 100,
+                            unit: i.unit,
+                            category: i.category,
+                            recipeTitle: recipe.title,
+                          });
+                          toast.success(
+                            `${i.name} ${formatQty(i.qty, i.unit)} added for ${recipe.title}`,
+                          );
+                        }}
+                      >
+                        <Plus className="h-4 w-4" />
+                      </Button>
                     </li>
                   ))}
                 </ul>
               </section>
+
             );
           })}
         </TabsContent>

@@ -2,7 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState } 
 import type { ReactNode } from "react";
 
 import { RECIPES } from "@/data/recipes";
-import type { AppState, InventoryItem, Recipe, Task } from "@/lib/types";
+import type { AppState, CartItem, InventoryItem, Recipe, Task } from "@/lib/types";
 
 const STORAGE_KEY = "bdp.state.v1";
 

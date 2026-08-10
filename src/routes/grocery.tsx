@@ -173,6 +173,64 @@ function Grocery() {
           })}
         </div>
       )}
+
+      {state.cart.length > 0 ? (
+        <section className="surface-card mt-5 overflow-hidden">
+          <div className="flex items-center justify-between gap-3 bg-surface-2 px-4 py-2.5">
+            <h2 className="text-sm font-bold">🛒 Added from recipes ({state.cart.length})</h2>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="rounded-full"
+              onClick={() => store.clearCart()}
+            >
+              Clear
+            </Button>
+          </div>
+          <ul>
+            {state.cart.map((item) => (
+              <li
+                key={item.id}
+                className="grid grid-cols-[auto_minmax(0,1fr)_auto_auto] items-center gap-3 border-b border-border px-4 py-3 last:border-0"
+              >
+                <button
+                  type="button"
+                  aria-label={`Mark ${item.name} as bought`}
+                  onClick={() => store.toggleCartItem(item.id)}
+                  className={cn(
+                    "grid h-6 w-6 shrink-0 place-items-center rounded-md border-2",
+                    item.done ? "border-success bg-success text-success-foreground" : "border-border",
+                  )}
+                >
+                  {item.done ? <Check className="h-4 w-4" /> : null}
+                </button>
+                <span className="min-w-0">
+                  <span className={cn("block font-semibold", item.done && "line-through opacity-60")}>
+                    {item.name}
+                  </span>
+                  {item.recipeTitle ? (
+                    <span className="block truncate text-xs text-muted-foreground">
+                      For {item.recipeTitle}
+                    </span>
+                  ) : null}
+                </span>
+                <span className="shrink-0 font-bold text-primary">
+                  {formatQty(item.qty, item.unit)}
+                </span>
+                <button
+                  type="button"
+                  aria-label={`Remove ${item.name}`}
+                  onClick={() => store.removeCartItem(item.id)}
+                  className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-surface-2 text-muted-foreground"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
     </Screen>
+
   );
 }

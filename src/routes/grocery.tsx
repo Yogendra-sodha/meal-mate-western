@@ -57,8 +57,16 @@ function Grocery() {
     })
       .filter(Boolean)
       .join("\n\n");
+    const cartText = state.cart.length
+      ? `\n\nAdded from recipes\n${state.cart
+          .map(
+            (c) =>
+              `- ${c.name}: ${formatQty(c.qty, c.unit)}${c.recipeTitle ? ` (for ${c.recipeTitle})` : ""}`,
+          )
+          .join("\n")}`
+      : "";
     try {
-      await navigator.clipboard.writeText(text || "Nothing to buy");
+      await navigator.clipboard.writeText(`${text}${cartText}`.trim() || "Nothing to buy");
       toast.success("Grocery list copied");
     } catch {
       toast.error("Could not copy the list");

@@ -51,6 +51,7 @@ function RecipeDetail() {
   const store = useStore();
   const recipe = store.recipesById[recipeId];
   const [servings, setServings] = useState(20);
+  const [editing, setEditing] = useState(false);
 
   if (!recipe) {
     return (
@@ -70,10 +71,11 @@ function RecipeDetail() {
   const ingredients = recipe.ingredients.map((i) =>
     scaleIngredient(i, servings, recipe.baseServings),
   );
+  const updated = formatUpdatedAt(recipe.updatedAt);
 
   return (
     <Screen>
-      <header className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 px-1 pt-5 pb-3">
+      <header className="grid grid-cols-[auto_minmax(0,1fr)_auto_auto] items-center gap-1 px-1 pt-5 pb-3">
         <Button asChild variant="ghost" size="icon" className="h-11 w-11 rounded-full">
           <Link to="/recipes" aria-label="Back">
             <ArrowLeft className="h-5 w-5" />
@@ -86,6 +88,15 @@ function RecipeDetail() {
           variant="ghost"
           size="icon"
           className="h-11 w-11 rounded-full"
+          aria-label="Edit recipe"
+          onClick={() => setEditing(true)}
+        >
+          <Pencil className="h-5 w-5" />
+        </Button>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-11 w-11 rounded-full"
           aria-label="Toggle favourite"
           onClick={() => store.toggleFavorite(recipe.id)}
         >
@@ -94,13 +105,39 @@ function RecipeDetail() {
       </header>
 
       <h1 className="text-2xl font-bold leading-tight">{recipe.title}</h1>
-      <p className="mt-1 text-sm text-muted-foreground">{recipe.description}</p>
+      <p className="mt-1 text-sm text-muted-foreground">
+        {recipe.description}{" "}
+        <a
+          href={youtubeLink(recipe)}
+          target="_blank"
+          rel="noreferrer noopener"
+          className="inline-flex items-center gap-1 font-semibold text-primary underline underline-offset-2"
+        >
+          <Youtube className="h-4 w-4" /> Watch on YouTube
+        </a>
+      </p>
+
+      {updated ? (
+        <p className="mt-2 text-xs font-semibold text-muted-foreground">Last updated {updated}</p>
+      ) : null}
 
       <div className="mt-3 flex flex-wrap items-center gap-2 text-sm font-semibold text-muted-foreground">
         <span>Prep {recipe.prepMin}m</span>
         <span>•</span>
         <span>Cook {recipe.cookMin}m</span>
       </div>
+
+      {editing ? (
+        <RecipeEditor
+          key={recipe.updatedAt ?? recipe.id}
+          mode="edit"
+          open={editing}
+          onOpenChange={setEditing}
+          recipe={recipe}
+          onSave={(next) => store.updateRecipe(recipe.id, next)}
+        />
+      ) : null}
+
 
       <div className="mt-4 flex flex-wrap gap-2">
         {[1, 2, 3, 4, 5].map((n) => (

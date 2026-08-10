@@ -2,7 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState } 
 import type { ReactNode } from "react";
 
 import { RECIPES } from "@/data/recipes";
-import type { AppState, InventoryItem, Recipe, Task } from "@/lib/types";
+import type { AppState, CartItem, InventoryItem, Recipe, Task } from "@/lib/types";
 
 const STORAGE_KEY = "bdp.state.v1";
 
@@ -39,6 +39,8 @@ export const initialState: AppState = {
   ratings: {},
   purchased: {},
   customRecipes: [],
+  recipeEdits: {},
+  cart: [],
   cookLog: [],
   defaultServings: 20,
 };
@@ -69,6 +71,12 @@ interface StoreValue {
   addPerson: (name: string) => void;
   removePerson: (id: string) => void;
   addRecipe: (recipe: Recipe) => void;
+  updateRecipe: (id: string, patch: Partial<Recipe>) => void;
+  resetRecipe: (id: string) => void;
+  addToCart: (item: Omit<CartItem, "id" | "done" | "addedAt">) => void;
+  toggleCartItem: (id: string) => void;
+  removeCartItem: (id: string) => void;
+  clearCart: () => void;
   reset: () => void;
 }
 
@@ -101,11 +109,19 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     setState((prev) => fn(structuredClone(prev)));
   }, []);
 
-  const recipes = useMemo(() => [...RECIPES, ...state.customRecipes], [state.customRecipes]);
+  const recipes = useMemo(
+    () =>
+      [...RECIPES, ...state.customRecipes].map((r) => {
+        const patch = state.recipeEdits[r.id];
+        return patch ? ({ ...r, ...patch } as Recipe) : r;
+      }),
+    [state.customRecipes, state.recipeEdits],
+  );
   const recipesById = useMemo(
     () => Object.fromEntries(recipes.map((r) => [r.id, r])),
     [recipes],
   );
+
 
   const value = useMemo<StoreValue>(() => {
     const buildTasksFor = (date: string, draft: AppState): Task[] => {
@@ -273,7 +289,57 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         }),
       addRecipe: (recipe) =>
         update((d) => {
-          d.customRecipes.push(recipe);
+          d.customRecipes.push({ ...recipe, updatedAt: new Date().toISOString() });
+          return d;
+        }),
+      updateRecipe: (id, patch) =>
+        update((d) => {
+          const custom = d.customRecipes.findIndex((r) => r.id === id);
+          const stamped = { ...patch, updatedAt: new Date().toISOString() };
+          if (custom >= 0) {
+            d.customRecipes[custom] = { ...d.customRecipes[custom]!, ...stamped };
+          } else {
+            d.recipeEdits[id] = { ...(d.recipeEdits[id] ?? {}), ...stamped };
+          }
+          return d;
+        }),
+      resetRecipe: (id) =>
+        update((d) => {
+          delete d.recipeEdits[id];
+          return d;
+        }),
+      addToCart: (item) =>
+        update((d) => {
+          const existing = d.cart.find(
+            (c) =>
+              c.name.toLowerCase() === item.name.toLowerCase() &&
+              c.unit === item.unit &&
+              c.recipeTitle === item.recipeTitle,
+          );
+          if (existing) existing.qty += item.qty;
+          else
+            d.cart.push({
+              ...item,
+              id: `cart-${Date.now()}-${Math.round(Math.random() * 1e6)}`,
+              done: false,
+              addedAt: new Date().toISOString(),
+            });
+          return d;
+        }),
+      toggleCartItem: (id) =>
+        update((d) => {
+          const c = d.cart.find((x) => x.id === id);
+          if (c) c.done = !c.done;
+          return d;
+        }),
+      removeCartItem: (id) =>
+        update((d) => {
+          d.cart = d.cart.filter((c) => c.id !== id);
+          return d;
+        }),
+      clearCart: () =>
+        update((d) => {
+          d.cart = [];
           return d;
         }),
       reset: () => setState(initialState),

@@ -1,9 +1,12 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { Heart, Search, Star } from "lucide-react";
+import { Heart, Plus, Search, Star } from "lucide-react";
 import { useMemo, useState } from "react";
 
 import { PageHeader, Screen } from "@/components/app-shell";
+import { RecipeEditor } from "@/components/recipe-editor";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { formatUpdatedAt } from "@/lib/planning";
 import { useStore } from "@/lib/store";
 import { CUISINES } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -32,6 +35,7 @@ function RecipeList() {
   const [q, setQ] = useState("");
   const [cuisine, setCuisine] = useState<string | null>(null);
   const [favOnly, setFavOnly] = useState(false);
+  const [creating, setCreating] = useState(false);
 
   const list = useMemo(
     () =>
@@ -47,7 +51,25 @@ function RecipeList() {
 
   return (
     <Screen>
-      <PageHeader title="Recipes" subtitle={`${list.length} pure-veg dishes, no onion or garlic`} />
+      <PageHeader
+        title="Recipes"
+        subtitle={`${list.length} pure-veg dishes, no onion or garlic`}
+        action={
+          <Button className="h-11 rounded-full" onClick={() => setCreating(true)}>
+            <Plus className="mr-1 h-4 w-4" /> Add
+          </Button>
+        }
+      />
+
+      {creating ? (
+        <RecipeEditor
+          mode="create"
+          open={creating}
+          onOpenChange={setCreating}
+          onSave={(r) => store.addRecipe(r)}
+        />
+      ) : null}
+
 
       <div className="relative mb-3">
         <Search className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -92,6 +114,11 @@ function RecipeList() {
                     Prep {r.prepMin}m • Cook {r.cookMin}m • {r.baseServings} plates
                     {rating ? ` • ${"★".repeat(rating)}` : ""}
                   </p>
+                  {formatUpdatedAt(r.updatedAt) ? (
+                    <p className="mt-1 text-xs font-semibold text-primary">
+                      Updated {formatUpdatedAt(r.updatedAt)}
+                    </p>
+                  ) : null}
                 </Link>
                 <button
                   type="button"

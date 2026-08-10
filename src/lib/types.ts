@@ -45,6 +45,10 @@ export interface Recipe {
   description: string;
   sourceName: string;
   sourceUrl: string;
+  /** optional YouTube walkthrough */
+  videoUrl?: string | undefined;
+  /** ISO timestamp of the last manual edit */
+  updatedAt?: string | undefined;
   prepMin: number;
   cookMin: number;
   /** all quantities are stated for this many plates */
@@ -90,6 +94,19 @@ export interface InventoryItem {
   recurring: boolean;
 }
 
+/** an item manually added to the shopping cart from a recipe */
+export interface CartItem {
+  id: string;
+  name: string;
+  qty: number;
+  unit: string;
+  category: Category;
+  /** which recipe it was added for */
+  recipeTitle?: string | undefined;
+  done: boolean;
+  addedAt: string;
+}
+
 export interface AppState {
   plan: Record<string, DayPlan>;
   tasks: Task[];
@@ -99,6 +116,9 @@ export interface AppState {
   ratings: Record<string, number>;
   purchased: Record<string, boolean>;
   customRecipes: Recipe[];
+  /** manual edits layered over the built-in recipe library */
+  recipeEdits: Record<string, Partial<Recipe>>;
+  cart: CartItem[];
   cookLog: { date: string; recipeId: string; cost?: number }[];
   defaultServings: number;
 }

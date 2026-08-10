@@ -34,6 +34,7 @@ function RecipeList() {
   const [q, setQ] = useState("");
   const [cuisine, setCuisine] = useState<string | null>(null);
   const [favOnly, setFavOnly] = useState(false);
+  const [creating, setCreating] = useState(false);
 
   const list = useMemo(
     () =>

@@ -113,6 +113,11 @@ function RecipeList() {
                     Prep {r.prepMin}m • Cook {r.cookMin}m • {r.baseServings} plates
                     {rating ? ` • ${"★".repeat(rating)}` : ""}
                   </p>
+                  {formatUpdatedAt(r.updatedAt) ? (
+                    <p className="mt-1 text-xs font-semibold text-primary">
+                      Updated {formatUpdatedAt(r.updatedAt)}
+                    </p>
+                  ) : null}
                 </Link>
                 <button
                   type="button"

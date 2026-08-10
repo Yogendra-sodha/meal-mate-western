@@ -47,7 +47,25 @@ function RecipeList() {
 
   return (
     <Screen>
-      <PageHeader title="Recipes" subtitle={`${list.length} pure-veg dishes, no onion or garlic`} />
+      <PageHeader
+        title="Recipes"
+        subtitle={`${list.length} pure-veg dishes, no onion or garlic`}
+        action={
+          <Button className="h-11 rounded-full" onClick={() => setCreating(true)}>
+            <Plus className="mr-1 h-4 w-4" /> Add
+          </Button>
+        }
+      />
+
+      {creating ? (
+        <RecipeEditor
+          mode="create"
+          open={creating}
+          onOpenChange={setCreating}
+          onSave={(r) => store.addRecipe(r)}
+        />
+      ) : null}
+
 
       <div className="relative mb-3">
         <Search className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />

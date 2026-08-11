@@ -194,8 +194,7 @@ function Grocery() {
         </div>
       )}
 
-      {(state.cart.length > 0 || true) ? (
-        <section className="surface-card mt-5 overflow-hidden">
+      <section className="surface-card mt-5 overflow-hidden">
           <div className="flex items-center justify-between gap-3 bg-surface-2 px-4 py-2.5">
             <h2 className="text-sm font-bold">
               🛒 Shopping cart{state.cart.length ? ` (${state.cart.length})` : ""}

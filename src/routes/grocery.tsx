@@ -1,13 +1,23 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { Check, RotateCcw, Share2, X } from "lucide-react";
+import { Check, Plus, RotateCcw, Share2, X } from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import { PageHeader, Screen } from "@/components/app-shell";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { buildGroceryList, formatQty, shortDayLabel, toISODate, weekDates } from "@/lib/planning";
 import { useStore } from "@/lib/store";
-import { CATEGORIES } from "@/lib/types";
+import { type Category, CATEGORIES } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/grocery")({

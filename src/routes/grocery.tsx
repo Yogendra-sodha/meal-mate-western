@@ -56,6 +56,8 @@ function Grocery() {
     () => buildGroceryList(dates, state, recipesById),
     [dates.join(","), state, recipesById],
   );
+
+  const [addOpen, setAddOpen] = useState(false);
   const toBuy = lines.filter((l) => l.needed > 0);
   const bought = toBuy.filter((l) => state.purchased[l.key]).length;
 

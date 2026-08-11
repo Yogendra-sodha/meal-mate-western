@@ -266,7 +266,6 @@ function Grocery() {
             <AddItemDialog open={addOpen} onOpenChange={setAddOpen} onAdd={store.addToCart} />
           </div>
         </section>
-      ) : null}
     </Screen>
 
   );

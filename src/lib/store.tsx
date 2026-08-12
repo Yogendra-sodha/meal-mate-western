@@ -1,41 +1,29 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 
 import { RECIPES } from "@/data/recipes";
-import type { AppState, CartItem, InventoryItem, Recipe, Task } from "@/lib/types";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/lib/auth";
+import type {
+  AppState,
+  CartItem,
+  Category,
+  Cuisine,
+  InventoryItem,
+  Recipe,
+  Task,
+} from "@/lib/types";
 
-const STORAGE_KEY = "bdp.state.v1";
+export const LOCAL_STORAGE_KEY = "bdp.state.v1";
 
-const DEFAULT_PEOPLE = [
-  "Amit",
-  "Bhavesh",
-  "Chirag",
-  "Dhruv",
-  "Harsh",
-  "Jay",
-  "Kunal",
-  "Mehul",
-  "Nirav",
-  "Parth",
-].map((name, i) => ({ id: `p${i + 1}`, name }));
-
-const DEFAULT_INVENTORY: InventoryItem[] = [
-  { id: "i1", name: "Rice", category: "grains", qty: 5, unit: "kg", recurring: true },
-  { id: "i2", name: "Whole wheat flour", category: "grains", qty: 10, unit: "kg", recurring: true },
-  { id: "i3", name: "Cooking oil", category: "pantry", qty: 5, unit: "ml", recurring: true },
-  { id: "i4", name: "Salt", category: "spices", qty: 1000, unit: "g", recurring: true },
-  { id: "i5", name: "Turmeric", category: "spices", qty: 200, unit: "g", recurring: true },
-  { id: "i6", name: "Cumin seeds", category: "spices", qty: 250, unit: "g", recurring: true },
-  { id: "i7", name: "Mustard seeds", category: "spices", qty: 200, unit: "g", recurring: true },
-  { id: "i8", name: "Ghee", category: "dairy", qty: 1000, unit: "g", recurring: true },
-];
+const BUILTIN_IDS = new Set(RECIPES.map((r) => r.id));
 
 export const initialState: AppState = {
   plan: {},
   tasks: [],
-  people: DEFAULT_PEOPLE,
-  inventory: DEFAULT_INVENTORY,
-  favorites: ["kadhi-khichdi", "paneer-butter-masala"],
+  people: [],
+  inventory: [],
+  favorites: [],
   ratings: {},
   purchased: {},
   customRecipes: [],
@@ -78,32 +66,227 @@ interface StoreValue {
   removeCartItem: (id: string) => void;
   clearCart: () => void;
   reset: () => void;
+  /** one-off import of data left over from the old offline-only version */
+  importLocalData: () => Promise<number>;
+  hasLocalData: boolean;
+  reload: () => Promise<void>;
 }
 
 const StoreContext = createContext<StoreValue | null>(null);
 
+type RecipeRow = {
+  id: string;
+  slug: string;
+  name: string;
+  description: string;
+  cuisine: string;
+  servings: number;
+  prep_min: number;
+  cook_min: number;
+  preparation_instructions: string[];
+  cooking_instructions: string[];
+  tags: string[];
+  source_name: string;
+  source_url: string;
+  video_url: string | null;
+  updated_at: string;
+};
+
+function rowToRecipe(row: RecipeRow, ingredients: Recipe["ingredients"]): Recipe {
+  return {
+    id: row.slug,
+    title: row.name,
+    cuisine: row.cuisine as Cuisine,
+    description: row.description,
+    sourceName: row.source_name,
+    sourceUrl: row.source_url,
+    videoUrl: row.video_url ?? undefined,
+    updatedAt: row.updated_at,
+    prepMin: row.prep_min,
+    cookMin: row.cook_min,
+    baseServings: row.servings,
+    ingredients,
+    prepSteps: row.preparation_instructions ?? [],
+    cookSteps: row.cooking_instructions ?? [],
+    tags: row.tags ?? [],
+  };
+}
+
 export function StoreProvider({ children }: { children: ReactNode }) {
+  const { user, household, members } = useAuth();
   const [state, setState] = useState<AppState>(initialState);
   const [hydrated, setHydrated] = useState(false);
+  const [hasLocalData, setHasLocalData] = useState(false);
+  const householdId = household?.id ?? null;
+  const reloadTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     try {
-      const raw = localStorage.getItem(STORAGE_KEY);
-      if (raw) setState({ ...initialState, ...(JSON.parse(raw) as AppState) });
+      setHasLocalData(Boolean(localStorage.getItem(LOCAL_STORAGE_KEY)));
     } catch {
-      /* ignore corrupt state */
+      /* ignore */
     }
-    setHydrated(true);
   }, []);
 
-  useEffect(() => {
-    if (!hydrated) return;
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-    } catch {
-      /* quota */
+  const load = useCallback(async () => {
+    if (!householdId) {
+      setState(initialState);
+      setHydrated(false);
+      return;
     }
-  }, [state, hydrated]);
+    const [
+      recipesRes,
+      ingredientsRes,
+      plansRes,
+      planItemsRes,
+      groceryRes,
+      pantryRes,
+      tasksRes,
+      favRes,
+      ratingRes,
+      checksRes,
+      logRes,
+    ] = await Promise.all([
+      supabase.from("recipes").select("*").eq("household_id", householdId),
+      supabase.from("recipe_ingredients").select("*"),
+      supabase.from("meal_plans").select("*").eq("household_id", householdId),
+      supabase.from("meal_plan_items").select("*"),
+      supabase.from("grocery_items").select("*").eq("household_id", householdId),
+      supabase.from("pantry_items").select("*").eq("household_id", householdId),
+      supabase.from("cooking_tasks").select("*").eq("household_id", householdId),
+      supabase.from("recipe_favorites").select("*").eq("household_id", householdId),
+      supabase.from("recipe_ratings").select("*").eq("household_id", householdId),
+      supabase.from("grocery_checks").select("*").eq("household_id", householdId),
+      supabase.from("cook_log").select("*").eq("household_id", householdId),
+    ]);
+
+    const ingByRecipe = new Map<string, Recipe["ingredients"]>();
+    for (const i of ingredientsRes.data ?? []) {
+      const list = ingByRecipe.get(i.recipe_id) ?? [];
+      list.push({
+        name: i.name,
+        qty: Number(i.qty),
+        unit: i.unit,
+        category: i.category as Category,
+        staple: i.staple,
+      });
+      ingByRecipe.set(i.recipe_id, list);
+    }
+
+    const customRecipes: Recipe[] = [];
+    const recipeEdits: Record<string, Partial<Recipe>> = {};
+    for (const row of (recipesRes.data ?? []) as RecipeRow[]) {
+      const recipe = rowToRecipe(row, ingByRecipe.get(row.id) ?? []);
+      if (BUILTIN_IDS.has(row.slug)) recipeEdits[row.slug] = recipe;
+      else customRecipes.push(recipe);
+    }
+
+    const planIdToDate = new Map<string, string>();
+    const plan: AppState["plan"] = {};
+    for (const p of plansRes.data ?? []) {
+      planIdToDate.set(p.id, p.date);
+      plan[p.date] = {
+        date: p.date,
+        recipeIds: [],
+        servings: p.servings,
+        cooked: p.cooked,
+        note: p.note ?? undefined,
+      };
+    }
+    const items = [...(planItemsRes.data ?? [])].sort((a, b) => a.position - b.position);
+    for (const it of items) {
+      const date = planIdToDate.get(it.meal_plan_id);
+      if (date && plan[date]) plan[date].recipeIds.push(it.recipe_ref);
+    }
+
+    const purchased: Record<string, boolean> = {};
+    for (const c of checksRes.data ?? []) purchased[c.item_key] = c.purchased;
+
+    const ratings: Record<string, number> = {};
+    for (const r of ratingRes.data ?? []) {
+      if (r.user_id === user?.id) ratings[r.recipe_ref] = r.value;
+    }
+
+    setState({
+      plan,
+      tasks: (tasksRes.data ?? []).map((t) => ({
+        id: t.task_key,
+        date: t.date,
+        recipeId: t.recipe_ref ?? undefined,
+        kind: t.kind as Task["kind"],
+        label: t.name,
+        assignee: t.assigned_to ?? undefined,
+        done: t.completed,
+      })),
+      people: members.map((m) => ({ id: m.user_id, name: m.name })),
+      inventory: (pantryRes.data ?? []).map((p) => ({
+        id: p.id,
+        name: p.name,
+        category: p.category as Category,
+        qty: Number(p.qty),
+        unit: p.unit,
+        recurring: p.recurring,
+      })),
+      favorites: (favRes.data ?? []).map((f) => f.recipe_ref),
+      ratings,
+      purchased,
+      customRecipes,
+      recipeEdits,
+      cart: (groceryRes.data ?? [])
+        .map((g) => ({
+          id: g.id,
+          name: g.name,
+          qty: Number(g.qty),
+          unit: g.unit,
+          category: g.category as Category,
+          recipeTitle: g.recipe_title ?? undefined,
+          done: g.purchased,
+          addedAt: g.created_at,
+          assignedTo: g.assigned_to ?? undefined,
+        }))
+        .sort((a, b) => a.addedAt.localeCompare(b.addedAt)),
+      cookLog: (logRes.data ?? []).map((c) => ({ date: c.date, recipeId: c.recipe_ref })),
+      defaultServings: household?.default_servings ?? 20,
+    });
+    setHydrated(true);
+  }, [householdId, household?.default_servings, members, user?.id]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  const scheduleReload = useCallback(() => {
+    if (reloadTimer.current) clearTimeout(reloadTimer.current);
+    reloadTimer.current = setTimeout(() => void load(), 250);
+  }, [load]);
+
+  // realtime: any change to household data refreshes everyone's screen
+  useEffect(() => {
+    if (!householdId) return;
+    const tables = [
+      "recipes",
+      "recipe_ingredients",
+      "meal_plans",
+      "meal_plan_items",
+      "grocery_items",
+      "pantry_items",
+      "cooking_tasks",
+      "recipe_favorites",
+      "recipe_ratings",
+      "grocery_checks",
+      "cook_log",
+    ];
+    const channel = supabase.channel(`household-${householdId}`);
+    for (const table of tables) {
+      channel.on("postgres_changes", { event: "*", schema: "public", table }, () =>
+        scheduleReload(),
+      );
+    }
+    channel.subscribe();
+    return () => {
+      void supabase.removeChannel(channel);
+    };
+  }, [householdId, scheduleReload]);
 
   const update = useCallback((fn: (draft: AppState) => AppState) => {
     setState((prev) => fn(structuredClone(prev)));
@@ -122,10 +305,76 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     [recipes],
   );
 
-
   const value = useMemo<StoreValue>(() => {
-    const buildTasksFor = (date: string, draft: AppState): Task[] => {
-      const day = draft.plan[date];
+    const hid = householdId;
+    const uid = user?.id ?? null;
+
+    const saveRecipe = async (recipe: Recipe) => {
+      if (!hid) return;
+      const { data, error } = await supabase
+        .from("recipes")
+        .upsert(
+          {
+            household_id: hid,
+            slug: recipe.id,
+            name: recipe.title,
+            description: recipe.description,
+            cuisine: recipe.cuisine,
+            servings: recipe.baseServings,
+            prep_min: recipe.prepMin,
+            cook_min: recipe.cookMin,
+            preparation_instructions: recipe.prepSteps,
+            cooking_instructions: recipe.cookSteps,
+            tags: recipe.tags,
+            source_name: recipe.sourceName,
+            source_url: recipe.sourceUrl,
+            video_url: recipe.videoUrl ?? null,
+            created_by: uid,
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: "household_id,slug" },
+        )
+        .select("id")
+        .single();
+      if (error || !data) return;
+      await supabase.from("recipe_ingredients").delete().eq("recipe_id", data.id);
+      if (recipe.ingredients.length) {
+        await supabase.from("recipe_ingredients").insert(
+          recipe.ingredients.map((i, position) => ({
+            recipe_id: data.id,
+            name: i.name,
+            qty: i.qty,
+            unit: i.unit,
+            category: i.category,
+            staple: Boolean(i.staple),
+            position,
+          })),
+        );
+      }
+    };
+
+    const writeDay = async (date: string, recipeIds: string[], servings: number) => {
+      if (!hid) return;
+      const { data } = await supabase
+        .from("meal_plans")
+        .upsert(
+          { household_id: hid, date, servings, updated_by: uid, updated_at: new Date().toISOString() },
+          { onConflict: "household_id,date" },
+        )
+        .select("id")
+        .single();
+      if (!data) return;
+      await supabase.from("meal_plan_items").delete().eq("meal_plan_id", data.id);
+      if (recipeIds.length) {
+        await supabase.from("meal_plan_items").insert(
+          recipeIds.map((recipe_ref, position) => ({ meal_plan_id: data.id, recipe_ref, position })),
+        );
+      }
+      await supabase.from("cooking_tasks").delete().eq("household_id", hid).eq("date", date);
+    };
+
+    const buildTasksFor = (date: string, plan: AppState["plan"]): Task[] => {
+      const day = plan[date];
       if (!day) return [];
       const tasks: Task[] = [];
       day.recipeIds.forEach((rid) => {
@@ -146,205 +395,439 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       return tasks;
     };
 
+    const insertTasks = async (tasks: Task[]) => {
+      if (!hid || !tasks.length) return;
+      await supabase.from("cooking_tasks").upsert(
+        tasks.map((t) => ({
+          household_id: hid,
+          task_key: t.id,
+          date: t.date,
+          recipe_ref: t.recipeId ?? null,
+          kind: t.kind,
+          name: t.label,
+          assigned_to: t.assignee ?? null,
+          completed: t.done,
+          created_by: uid,
+        })),
+        { onConflict: "household_id,task_key" },
+      );
+    };
+
+    const patchTask = async (taskKey: string, patch: Record<string, unknown>) => {
+      if (!hid) return;
+      await supabase
+        .from("cooking_tasks")
+        .update(patch)
+        .eq("household_id", hid)
+        .eq("task_key", taskKey);
+    };
+
     return {
       state,
       hydrated,
       recipes,
       recipesById,
       update,
-      toggleFavorite: (id) =>
+      hasLocalData,
+      reload: load,
+      toggleFavorite: (id) => {
+        const on = state.favorites.includes(id);
         update((d) => {
-          d.favorites = d.favorites.includes(id)
-            ? d.favorites.filter((f) => f !== id)
-            : [...d.favorites, id];
+          d.favorites = on ? d.favorites.filter((f) => f !== id) : [...d.favorites, id];
           return d;
-        }),
-      rate: (id, value) =>
+        });
+        if (!hid) return;
+        void (on
+          ? supabase
+              .from("recipe_favorites")
+              .delete()
+              .eq("household_id", hid)
+              .eq("recipe_ref", id)
+          : supabase.from("recipe_favorites").insert({ household_id: hid, recipe_ref: id }));
+      },
+      rate: (id, value) => {
         update((d) => {
           d.ratings[id] = value;
           return d;
-        }),
-      setDay: (date, recipeIds, servings) =>
+        });
+        if (!hid || !uid) return;
+        void supabase
+          .from("recipe_ratings")
+          .upsert(
+            { household_id: hid, recipe_ref: id, user_id: uid, value },
+            { onConflict: "household_id,recipe_ref,user_id" },
+          );
+      },
+      setDay: (date, recipeIds, servings) => {
+        const next = servings ?? state.plan[date]?.servings ?? state.defaultServings;
         update((d) => {
           const prev = d.plan[date];
           d.plan[date] = {
             date,
             recipeIds,
-            servings: servings ?? prev?.servings ?? d.defaultServings,
+            servings: next,
             ...(prev?.note !== undefined ? { note: prev.note } : {}),
             ...(prev?.cooked !== undefined ? { cooked: prev.cooked } : {}),
           };
           d.tasks = d.tasks.filter((t) => t.date !== date);
           return d;
-        }),
-      clearDay: (date) =>
+        });
+        void writeDay(date, recipeIds, next);
+      },
+      clearDay: (date) => {
         update((d) => {
           delete d.plan[date];
           d.tasks = d.tasks.filter((t) => t.date !== date);
           return d;
-        }),
-      setServings: (date, servings) =>
+        });
+        if (!hid) return;
+        void supabase.from("meal_plans").delete().eq("household_id", hid).eq("date", date);
+        void supabase.from("cooking_tasks").delete().eq("household_id", hid).eq("date", date);
+      },
+      setServings: (date, servings) => {
         update((d) => {
           if (d.plan[date]) d.plan[date].servings = servings;
           return d;
-        }),
-      swapDays: (a, b) =>
+        });
+        if (!hid) return;
+        void supabase
+          .from("meal_plans")
+          .update({ servings })
+          .eq("household_id", hid)
+          .eq("date", date);
+      },
+      swapDays: (a, b) => {
+        const pa = state.plan[a];
+        const pb = state.plan[b];
         update((d) => {
-          const pa = d.plan[a];
-          const pb = d.plan[b];
           if (pb) d.plan[a] = { ...pb, date: a };
           else delete d.plan[a];
           if (pa) d.plan[b] = { ...pa, date: b };
           else delete d.plan[b];
           d.tasks = d.tasks.filter((t) => t.date !== a && t.date !== b);
           return d;
-        }),
-      markCooked: (date) =>
+        });
+        void (async () => {
+          if (!hid) return;
+          await supabase.from("meal_plans").delete().eq("household_id", hid).in("date", [a, b]);
+          await supabase.from("cooking_tasks").delete().eq("household_id", hid).in("date", [a, b]);
+          if (pb) await writeDay(a, pb.recipeIds, pb.servings);
+          if (pa) await writeDay(b, pa.recipeIds, pa.servings);
+        })();
+      },
+      markCooked: (date) => {
+        const day = state.plan[date];
+        if (!day) return;
+        const cooked = !day.cooked;
         update((d) => {
-          const day = d.plan[date];
-          if (!day) return d;
-          day.cooked = !day.cooked;
-          if (day.cooked) {
-            day.recipeIds.forEach((rid) => d.cookLog.push({ date, recipeId: rid }));
-          } else {
-            d.cookLog = d.cookLog.filter((c) => c.date !== date);
-          }
+          const target = d.plan[date];
+          if (!target) return d;
+          target.cooked = cooked;
+          if (cooked) target.recipeIds.forEach((rid) => d.cookLog.push({ date, recipeId: rid }));
+          else d.cookLog = d.cookLog.filter((c) => c.date !== date);
           return d;
-        }),
-      togglePurchased: (key) =>
+        });
+        if (!hid) return;
+        void supabase.from("meal_plans").update({ cooked }).eq("household_id", hid).eq("date", date);
+        if (cooked) {
+          void supabase
+            .from("cook_log")
+            .insert(day.recipeIds.map((rid) => ({ household_id: hid, date, recipe_ref: rid })));
+        } else {
+          void supabase.from("cook_log").delete().eq("household_id", hid).eq("date", date);
+        }
+      },
+      togglePurchased: (key) => {
+        const next = !state.purchased[key];
         update((d) => {
-          d.purchased[key] = !d.purchased[key];
+          d.purchased[key] = next;
           return d;
-        }),
-      clearPurchased: () =>
+        });
+        if (!hid) return;
+        void supabase
+          .from("grocery_checks")
+          .upsert(
+            { household_id: hid, item_key: key, purchased: next },
+            { onConflict: "household_id,item_key" },
+          );
+      },
+      clearPurchased: () => {
         update((d) => {
           d.purchased = {};
           return d;
-        }),
-      ensureTasks: (date) =>
+        });
+        if (!hid) return;
+        void supabase.from("grocery_checks").delete().eq("household_id", hid);
+      },
+      ensureTasks: (date) => {
+        if (state.tasks.some((t) => t.date === date)) return;
+        const built = buildTasksFor(date, state.plan);
+        if (!built.length) return;
         update((d) => {
-          if (d.tasks.some((t) => t.date === date)) return d;
-          d.tasks = [...d.tasks, ...buildTasksFor(date, d)];
+          d.tasks = [...d.tasks, ...built];
           return d;
-        }),
-      toggleTask: (id) =>
+        });
+        void insertTasks(built);
+      },
+      toggleTask: (id) => {
+        const current = state.tasks.find((t) => t.id === id);
+        const done = !current?.done;
         update((d) => {
           const t = d.tasks.find((x) => x.id === id);
-          if (t) t.done = !t.done;
+          if (t) t.done = done;
           return d;
-        }),
-      assignTask: (id, assignee) =>
+        });
+        void patchTask(id, { completed: done, completed_at: done ? new Date().toISOString() : null });
+      },
+      assignTask: (id, assignee) => {
         update((d) => {
           const t = d.tasks.find((x) => x.id === id);
           if (t) t.assignee = assignee ?? undefined;
           return d;
-        }),
-      autoAssign: (date) =>
+        });
+        void patchTask(id, { assigned_to: assignee ?? null });
+      },
+      autoAssign: (date) => {
+        const people = state.people;
+        if (!people.length) return;
+        let i = Math.floor(Math.random() * people.length);
+        const assignments: { id: string; assignee: string }[] = [];
+        state.tasks
+          .filter((t) => t.date === date)
+          .forEach((t) => {
+            assignments.push({ id: t.id, assignee: people[i % people.length]!.id });
+            i += 1;
+          });
         update((d) => {
-          const people = d.people;
-          if (!people.length) return d;
-          let i = Math.floor(Math.random() * people.length);
-          d.tasks
-            .filter((t) => t.date === date)
-            .forEach((t) => {
-              t.assignee = people[i % people.length]!.id;
-              i += 1;
-            });
+          assignments.forEach((a) => {
+            const t = d.tasks.find((x) => x.id === a.id);
+            if (t) t.assignee = a.assignee;
+          });
           return d;
-        }),
-      addTask: (task) =>
+        });
+        void Promise.all(assignments.map((a) => patchTask(a.id, { assigned_to: a.assignee })));
+      },
+      addTask: (task) => {
+        const created: Task = { ...task, id: `${task.date}-custom-${Date.now()}`, done: false };
         update((d) => {
-          d.tasks.push({ ...task, id: `${task.date}-custom-${Date.now()}`, done: false });
+          d.tasks.push(created);
           return d;
-        }),
-      removeTask: (id) =>
+        });
+        void insertTasks([created]);
+      },
+      removeTask: (id) => {
         update((d) => {
           d.tasks = d.tasks.filter((t) => t.id !== id);
           return d;
-        }),
-      upsertInventory: (item) =>
+        });
+        if (!hid) return;
+        void supabase.from("cooking_tasks").delete().eq("household_id", hid).eq("task_key", id);
+      },
+      upsertInventory: (item) => {
+        const existing = state.inventory.find((i) => i.id === item.id);
         update((d) => {
           const idx = d.inventory.findIndex((i) => i.id === item.id);
           if (idx >= 0) d.inventory[idx] = item;
           else d.inventory.push(item);
           return d;
-        }),
-      removeInventory: (id) =>
+        });
+        if (!hid) return;
+        const payload = {
+          name: item.name,
+          category: item.category,
+          qty: item.qty,
+          unit: item.unit,
+          recurring: item.recurring,
+        };
+        if (existing) {
+          void supabase.from("pantry_items").update(payload).eq("id", item.id);
+        } else {
+          void supabase
+            .from("pantry_items")
+            .insert({ ...payload, household_id: hid })
+            .then(() => load());
+        }
+      },
+      removeInventory: (id) => {
         update((d) => {
           d.inventory = d.inventory.filter((i) => i.id !== id);
           return d;
-        }),
-      addPerson: (name) =>
-        update((d) => {
-          d.people.push({ id: `p${Date.now()}`, name });
-          return d;
-        }),
-      removePerson: (id) =>
+        });
+        void supabase.from("pantry_items").delete().eq("id", id);
+      },
+      addPerson: () => {
+        /* roommates join with the household invite code */
+      },
+      removePerson: (id) => {
         update((d) => {
           d.people = d.people.filter((p) => p.id !== id);
-          d.tasks.forEach((t) => {
-            if (t.assignee === id) delete t.assignee;
-          });
           return d;
-        }),
-      addRecipe: (recipe) =>
+        });
+        if (!hid) return;
+        void supabase
+          .from("household_members")
+          .delete()
+          .eq("household_id", hid)
+          .eq("user_id", id);
+      },
+      addRecipe: (recipe) => {
+        const stamped = { ...recipe, updatedAt: new Date().toISOString() };
         update((d) => {
-          d.customRecipes.push({ ...recipe, updatedAt: new Date().toISOString() });
+          d.customRecipes.push(stamped);
           return d;
-        }),
-      updateRecipe: (id, patch) =>
+        });
+        void saveRecipe(stamped);
+      },
+      updateRecipe: (id, patch) => {
+        const base = recipesById[id];
+        if (!base) return;
+        const next = { ...base, ...patch, id, updatedAt: new Date().toISOString() } as Recipe;
         update((d) => {
           const custom = d.customRecipes.findIndex((r) => r.id === id);
-          const stamped = { ...patch, updatedAt: new Date().toISOString() };
-          if (custom >= 0) {
-            d.customRecipes[custom] = { ...d.customRecipes[custom]!, ...stamped };
-          } else {
-            d.recipeEdits[id] = { ...(d.recipeEdits[id] ?? {}), ...stamped };
-          }
+          if (custom >= 0) d.customRecipes[custom] = next;
+          else d.recipeEdits[id] = next;
           return d;
-        }),
-      resetRecipe: (id) =>
+        });
+        void saveRecipe(next);
+      },
+      resetRecipe: (id) => {
         update((d) => {
           delete d.recipeEdits[id];
           return d;
-        }),
-      addToCart: (item) =>
-        update((d) => {
-          const existing = d.cart.find(
-            (c) =>
-              c.name.toLowerCase() === item.name.toLowerCase() &&
-              c.unit === item.unit &&
-              c.recipeTitle === item.recipeTitle,
-          );
-          if (existing) existing.qty += item.qty;
-          else
-            d.cart.push({
-              ...item,
-              id: `cart-${Date.now()}-${Math.round(Math.random() * 1e6)}`,
-              done: false,
-              addedAt: new Date().toISOString(),
-            });
-          return d;
-        }),
-      toggleCartItem: (id) =>
+        });
+        if (!hid) return;
+        void supabase.from("recipes").delete().eq("household_id", hid).eq("slug", id);
+      },
+      addToCart: (item) => {
+        if (!hid) return;
+        const existing = state.cart.find(
+          (c) =>
+            c.name.toLowerCase() === item.name.toLowerCase() &&
+            c.unit === item.unit &&
+            c.recipeTitle === item.recipeTitle,
+        );
+        if (existing) {
+          const qty = existing.qty + item.qty;
+          update((d) => {
+            const c = d.cart.find((x) => x.id === existing.id);
+            if (c) c.qty = qty;
+            return d;
+          });
+          void supabase.from("grocery_items").update({ qty }).eq("id", existing.id);
+          return;
+        }
+        void supabase
+          .from("grocery_items")
+          .insert({
+            household_id: hid,
+            name: item.name,
+            qty: item.qty,
+            unit: item.unit,
+            category: item.category,
+            recipe_title: item.recipeTitle ?? null,
+            created_by: uid,
+          })
+          .then(() => load());
+      },
+      toggleCartItem: (id) => {
+        const current = state.cart.find((c) => c.id === id);
+        const done = !current?.done;
         update((d) => {
           const c = d.cart.find((x) => x.id === id);
-          if (c) c.done = !c.done;
+          if (c) c.done = done;
           return d;
-        }),
-      removeCartItem: (id) =>
+        });
+        void supabase.from("grocery_items").update({ purchased: done }).eq("id", id);
+      },
+      removeCartItem: (id) => {
         update((d) => {
           d.cart = d.cart.filter((c) => c.id !== id);
           return d;
-        }),
-      clearCart: () =>
+        });
+        void supabase.from("grocery_items").delete().eq("id", id);
+      },
+      clearCart: () => {
         update((d) => {
           d.cart = [];
           return d;
-        }),
+        });
+        if (!hid) return;
+        void supabase.from("grocery_items").delete().eq("household_id", hid);
+      },
       reset: () => setState(initialState),
+      importLocalData: async () => {
+        if (!hid) return 0;
+        let raw: string | null = null;
+        try {
+          raw = localStorage.getItem(LOCAL_STORAGE_KEY);
+        } catch {
+          raw = null;
+        }
+        if (!raw) return 0;
+        const local = JSON.parse(raw) as Partial<AppState>;
+        let imported = 0;
+
+        for (const recipe of local.customRecipes ?? []) {
+          await saveRecipe(recipe);
+          imported += 1;
+        }
+        for (const [slug, patch] of Object.entries(local.recipeEdits ?? {})) {
+          const base = RECIPES.find((r) => r.id === slug);
+          if (!base) continue;
+          await saveRecipe({ ...base, ...patch } as Recipe);
+          imported += 1;
+        }
+        for (const day of Object.values(local.plan ?? {})) {
+          await writeDay(day.date, day.recipeIds, day.servings);
+          imported += 1;
+        }
+        if (local.inventory?.length) {
+          await supabase.from("pantry_items").insert(
+            local.inventory.map((i) => ({
+              household_id: hid,
+              name: i.name,
+              category: i.category,
+              qty: i.qty,
+              unit: i.unit,
+              recurring: i.recurring,
+            })),
+          );
+          imported += local.inventory.length;
+        }
+        if (local.cart?.length) {
+          await supabase.from("grocery_items").insert(
+            local.cart.map((c) => ({
+              household_id: hid,
+              name: c.name,
+              qty: c.qty,
+              unit: c.unit,
+              category: c.category,
+              recipe_title: c.recipeTitle ?? null,
+              purchased: c.done,
+              created_by: uid,
+            })),
+          );
+          imported += local.cart.length;
+        }
+        if (local.favorites?.length) {
+          await supabase
+            .from("recipe_favorites")
+            .upsert(
+              local.favorites.map((recipe_ref) => ({ household_id: hid, recipe_ref })),
+              { onConflict: "household_id,recipe_ref" },
+            );
+          imported += local.favorites.length;
+        }
+        try {
+          localStorage.setItem(`${LOCAL_STORAGE_KEY}.imported`, new Date().toISOString());
+        } catch {
+          /* ignore */
+        }
+        await load();
+        return imported;
+      },
     };
-  }, [state, hydrated, recipes, recipesById, update]);
+  }, [state, hydrated, recipes, recipesById, update, householdId, user?.id, load, hasLocalData]);
 
   return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>;
 }

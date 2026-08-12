@@ -165,7 +165,7 @@ function Dashboard() {
           <section className="surface-card p-4">
             <div className="flex items-center justify-between gap-3">
               <h3 className="font-bold">Buy today</h3>
-              <Link to="/grocery" className="text-sm font-semibold text-primary">
+              <Link to="/grocery" search={{ week: 0 }} className="text-sm font-semibold text-primary">
                 Full list
               </Link>
             </div>

@@ -105,6 +105,8 @@ export interface CartItem {
   recipeTitle?: string | undefined;
   done: boolean;
   addedAt: string;
+  /** roommate assigned to buy this item */
+  assignedTo?: string | undefined;
 }
 
 export interface AppState {

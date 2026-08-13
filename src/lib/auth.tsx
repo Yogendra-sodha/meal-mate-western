@@ -107,12 +107,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
-    void loadHousehold(session?.user?.id);
+    setHouseholdLoaded(false);
+    void loadHousehold(session?.user?.id).finally(() => setHouseholdLoaded(true));
   }, [session?.user?.id, loadHousehold]);
 
   const value = useMemo<AuthValue>(
     () => ({
       loading,
+      householdLoaded,
       session,
       user: session?.user ?? null,
       household,

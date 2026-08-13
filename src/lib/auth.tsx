@@ -47,6 +47,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [household, setHousehold] = useState<Household | null>(null);
   const [members, setMembers] = useState<Member[]>([]);
+  const [householdLoaded, setHouseholdLoaded] = useState(false);
 
   const loadHousehold = useCallback(async (userId: string | undefined) => {
     if (!userId) {

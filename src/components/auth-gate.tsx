@@ -181,9 +181,9 @@ function HouseholdScreen() {
 }
 
 export function AuthGate({ children }: { children: ReactNode }) {
-  const { loading, session, household } = useAuth();
+  const { loading, householdLoaded, session, household } = useAuth();
 
-  if (loading) {
+  if (loading || (session && !householdLoaded)) {
     return (
       <div className="grid min-h-screen place-items-center">
         <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />

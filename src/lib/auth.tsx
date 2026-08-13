@@ -167,7 +167,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         await loadHousehold(session?.user?.id);
       },
     }),
-    [loading, session, household, members, loadHousehold],
+    [loading, householdLoaded, session, household, members, loadHousehold],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

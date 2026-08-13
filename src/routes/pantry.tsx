@@ -1,11 +1,12 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { Download, Plus, Trash2, UserPlus } from "lucide-react";
+import { Download, LogOut, Plus, Trash2, UploadCloud } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 
 import { PageHeader, Screen } from "@/components/app-shell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { useAuth } from "@/lib/auth";
 import { useStore } from "@/lib/store";
 import { CATEGORIES, type Category } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -36,7 +37,8 @@ function Pantry() {
   const [qty, setQty] = useState("1");
   const [unit, setUnit] = useState("kg");
   const [category, setCategory] = useState<Category>("pantry");
-  const [person, setPerson] = useState("");
+  const { household, members, user, signOut } = useAuth();
+  const [importing, setImporting] = useState(false);
 
   const add = () => {
     if (!name.trim()) return;

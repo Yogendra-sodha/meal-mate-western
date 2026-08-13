@@ -12,6 +12,8 @@ import { useEffect, type ReactNode } from "react";
 import appCss from "../styles.css?url";
 import { BottomNav } from "../components/app-shell";
 import { StoreProvider } from "../lib/store";
+import { AuthProvider } from "../lib/auth";
+import { AuthGate } from "../components/auth-gate";
 import { Toaster } from "../components/ui/sonner";
 import { reportLovableError } from "../lib/lovable-error-reporting";
 

@@ -145,38 +145,64 @@ function Pantry() {
       })}
 
       <section className="surface-card mt-6 p-4">
-        <h2 className="font-bold">Roommates ({state.people.length})</h2>
-        <ul className="mt-3 flex flex-wrap gap-2">
-          {state.people.map((p) => (
-            <li key={p.id}>
-              <button
-                type="button"
-                onClick={() => store.removePerson(p.id)}
-                className="rounded-full bg-surface-2 px-3 py-1.5 text-sm font-semibold"
-              >
-                {p.name} ✕
-              </button>
+        <h2 className="font-bold">{household?.name ?? "Household"}</h2>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Share this invite code so roommates can join and see the same plan.
+        </p>
+        <button
+          type="button"
+          onClick={() => {
+            if (!household) return;
+            void navigator.clipboard.writeText(household.invite_code);
+            toast.success("Invite code copied");
+          }}
+          className="mt-3 w-full rounded-2xl bg-surface-2 py-3 text-center text-2xl font-bold tracking-[0.3em]"
+        >
+          {household?.invite_code ?? "------"}
+        </button>
+
+        <h3 className="mt-5 font-bold">Roommates ({members.length})</h3>
+        <ul className="mt-2 flex flex-wrap gap-2">
+          {members.map((m) => (
+            <li
+              key={m.user_id}
+              className="rounded-full bg-surface-2 px-3 py-1.5 text-sm font-semibold"
+            >
+              {m.name}
+              {m.user_id === user?.id ? " (you)" : ""}
+              {m.role === "owner" ? " ★" : ""}
             </li>
           ))}
         </ul>
-        <div className="mt-3 flex gap-2">
-          <Input
-            value={person}
-            onChange={(e) => setPerson(e.target.value)}
-            placeholder="Add roommate"
-            className="h-11"
-          />
+
+        {store.hasLocalData ? (
           <Button
-            className="h-11 shrink-0 rounded-full"
-            onClick={() => {
-              if (!person.trim()) return;
-              store.addPerson(person.trim());
-              setPerson("");
+            variant="secondary"
+            disabled={importing}
+            className="mt-5 h-11 w-full rounded-full"
+            onClick={async () => {
+              setImporting(true);
+              try {
+                const count = await store.importLocalData();
+                toast.success(`Imported ${count} item${count === 1 ? "" : "s"} into the household`);
+              } catch (error) {
+                toast.error(error instanceof Error ? error.message : "Import failed");
+              } finally {
+                setImporting(false);
+              }
             }}
           >
-            <UserPlus className="h-4 w-4" />
+            <UploadCloud className="mr-2 h-4 w-4" /> Import my offline data
           </Button>
-        </div>
+        ) : null}
+
+        <Button
+          variant="ghost"
+          className="mt-2 h-11 w-full rounded-full text-muted-foreground"
+          onClick={() => void signOut()}
+        >
+          <LogOut className="mr-2 h-4 w-4" /> Sign out
+        </Button>
       </section>
 
       <Button variant="outline" className="mt-4 h-12 w-full rounded-full" onClick={exportData}>

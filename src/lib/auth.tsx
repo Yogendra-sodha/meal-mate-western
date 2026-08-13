@@ -21,6 +21,7 @@ export interface Member {
 
 interface AuthValue {
   loading: boolean;
+  householdLoaded: boolean;
   session: Session | null;
   user: User | null;
   household: Household | null;

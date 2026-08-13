@@ -21,6 +21,7 @@ export interface Member {
 
 interface AuthValue {
   loading: boolean;
+  householdLoaded: boolean;
   session: Session | null;
   user: User | null;
   household: Household | null;
@@ -46,6 +47,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [household, setHousehold] = useState<Household | null>(null);
   const [members, setMembers] = useState<Member[]>([]);
+  const [householdLoaded, setHouseholdLoaded] = useState(false);
 
   const loadHousehold = useCallback(async (userId: string | undefined) => {
     if (!userId) {
@@ -105,12 +107,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
-    void loadHousehold(session?.user?.id);
+    setHouseholdLoaded(false);
+    void loadHousehold(session?.user?.id).finally(() => setHouseholdLoaded(true));
   }, [session?.user?.id, loadHousehold]);
 
   const value = useMemo<AuthValue>(
     () => ({
       loading,
+      householdLoaded,
       session,
       user: session?.user ?? null,
       household,
@@ -163,7 +167,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         await loadHousehold(session?.user?.id);
       },
     }),
-    [loading, session, household, members, loadHousehold],
+    [loading, householdLoaded, session, household, members, loadHousehold],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

@@ -413,7 +413,17 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       );
     };
 
-    const patchTask = async (taskKey: string, patch: Record<string, unknown>) => {
+    type TaskPatch = {
+      assigned_to?: string | null;
+      completed?: boolean;
+      completed_at?: string | null;
+      name?: string;
+      kind?: string;
+      date?: string;
+      recipe_ref?: string | null;
+    };
+
+    const patchTask = async (taskKey: string, patch: TaskPatch) => {
       if (!hid) return;
       await supabase
         .from("cooking_tasks")

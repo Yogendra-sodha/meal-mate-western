@@ -45,7 +45,7 @@ function SignInScreen() {
         await signIn(email.trim(), password);
       }
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Something went wrong");
+      toast.error(friendlyAuthError(error));
     } finally {
       setBusy(false);
     }
@@ -124,7 +124,7 @@ function HouseholdScreen() {
     try {
       await fn();
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Something went wrong");
+      toast.error(friendlyAuthError(error));
     } finally {
       setBusy(false);
     }
@@ -178,6 +178,21 @@ function HouseholdScreen() {
       </Button>
     </Shell>
   );
+}
+
+/**
+ * Supabase's raw auth errors are easy to misread — "email rate limit exceeded"
+ * is about the confirmation mailer, not the number of accounts allowed.
+ */
+function friendlyAuthError(error: unknown): string {
+  const message = error instanceof Error ? error.message : "";
+  if (/email rate limit|rate limit exceeded/i.test(message)) {
+    return "Too many confirmation emails were sent in a short time. Wait an hour and try again, or ask the household owner to turn off email confirmation.";
+  }
+  if (/already registered|already been registered/i.test(message)) {
+    return "That email already has an account — try signing in instead.";
+  }
+  return message || "Something went wrong";
 }
 
 export function AuthGate({ children }: { children: ReactNode }) {

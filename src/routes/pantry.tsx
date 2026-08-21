@@ -1,5 +1,5 @@
-import { createFileRoute } from "@tanstack/react-router";
-import { Download, LogOut, Plus, Trash2, UploadCloud } from "lucide-react";
+import { createFileRoute, Link } from "@tanstack/react-router";
+import { Download, LogOut, Plus, ShieldCheck, Trash2, UploadCloud } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 
@@ -38,7 +38,7 @@ function Pantry() {
   const [qty, setQty] = useState("1");
   const [unit, setUnit] = useState("kg");
   const [category, setCategory] = useState<Category>("pantry");
-  const { household, members, user, signOut } = useAuth();
+  const { household, members, user, signOut, isAdmin } = useAuth();
   const [importing, setImporting] = useState(false);
 
   const add = () => {
@@ -197,6 +197,14 @@ function Pantry() {
             }}
           >
             <UploadCloud className="mr-2 h-4 w-4" /> Import my offline data
+          </Button>
+        ) : null}
+
+        {isAdmin ? (
+          <Button asChild variant="outline" className="mt-2 h-11 w-full rounded-full">
+            <Link to="/admin">
+              <ShieldCheck className="mr-2 h-4 w-4" /> Admin overview
+            </Link>
           </Button>
         ) : null}
 

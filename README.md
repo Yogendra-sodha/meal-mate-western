@@ -421,23 +421,18 @@ Build this as a real production-quality application, not just a demo. Use clean 
 highest priority meal plaanning and setting what to eat for whole week 
 what to bring and how much to bring
 
-This project was built with [Lovable](https://lovable.dev).
+## Stack
 
-## Build with Lovable
-
-Continue developing this project in the [Lovable editor](https://lovable.dev/projects/b6f109b9-51db-437d-bc88-b9512a9ceea7).
-
-- **Ship faster**: describe what you want to build and Lovable handles the code.
-- **Stay in sync**: every change made in Lovable is committed straight to this repository.
-- **Full ownership**: this code is yours. Push to `main` on GitHub and your changes sync back into Lovable, ready for your next prompt.
+- **Frontend** — React + TanStack Start (SSR), Tailwind, deployed on Vercel
+- **Backend** — Supabase (Postgres, Auth, Realtime) with row level security
+- **Icons** — regenerate with `python3 scripts/generate-icons.py`
 
 ## Development
 
-Prefer working locally? You need Node.js and npm — [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating).
-
 ```sh
-git clone <this-repository-url>
-cd <repository-name>
-npm i
-npm run dev
+bun install
+bun run dev      # local dev server
+bun run build    # production build
 ```
+
+Copy `.env.example` to `.env` and fill in your Supabase project values.

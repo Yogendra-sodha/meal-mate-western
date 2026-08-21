@@ -21,6 +21,8 @@ export interface Member {
 
 interface AuthValue {
   loading: boolean;
+  /** true when this account is listed in public.app_admins */
+  isAdmin: boolean;
   householdLoaded: boolean;
   session: Session | null;
   user: User | null;
@@ -48,6 +50,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [household, setHousehold] = useState<Household | null>(null);
   const [members, setMembers] = useState<Member[]>([]);
   const [householdLoaded, setHouseholdLoaded] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
 
   const loadHousehold = useCallback(async (userId: string | undefined) => {
     if (!userId) {
@@ -111,9 +114,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     void loadHousehold(session?.user?.id).finally(() => setHouseholdLoaded(true));
   }, [session?.user?.id, loadHousehold]);
 
+  // RLS limits app_admins to the caller's own row, so a returned row means
+  // this account is an admin. The server re-checks on every admin query.
+  useEffect(() => {
+    const uid = session?.user?.id;
+    if (!uid) {
+      setIsAdmin(false);
+      return;
+    }
+    let active = true;
+    void supabase
+      .from("app_admins")
+      .select("user_id")
+      .eq("user_id", uid)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (active) setIsAdmin(Boolean(data));
+      });
+    return () => {
+      active = false;
+    };
+  }, [session?.user?.id]);
+
   const value = useMemo<AuthValue>(
     () => ({
       loading,
+      isAdmin,
       householdLoaded,
       session,
       user: session?.user ?? null,
@@ -167,7 +193,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         await loadHousehold(session?.user?.id);
       },
     }),
-    [loading, householdLoaded, session, household, members, loadHousehold],
+    [loading, isAdmin, householdLoaded, session, household, members, loadHousehold],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

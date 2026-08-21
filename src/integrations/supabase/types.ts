@@ -14,6 +14,21 @@ export type Database = {
   }
   public: {
     Tables: {
+      app_admins: {
+        Row: {
+          created_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       cook_log: {
         Row: {
           created_at: string
@@ -559,6 +574,8 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      admin_household_overview: { Args: Record<string, never>; Returns: Json }
+      is_app_admin: { Args: Record<string, never>; Returns: boolean }
       is_household_member: { Args: { _household_id: string }; Returns: boolean }
       join_household_by_code: { Args: { _code: string }; Returns: string }
       shares_household: { Args: { _user_id: string }; Returns: boolean }

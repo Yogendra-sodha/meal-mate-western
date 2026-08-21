@@ -60,6 +60,8 @@ export type Database = {
           name: string
           recipe_ref: string | null
           task_key: string
+          updated_at: string
+          updated_by: string | null
         }
         Insert: {
           assigned_to?: string | null
@@ -74,6 +76,8 @@ export type Database = {
           name: string
           recipe_ref?: string | null
           task_key: string
+          updated_at?: string
+          updated_by?: string | null
         }
         Update: {
           assigned_to?: string | null
@@ -88,6 +92,8 @@ export type Database = {
           name?: string
           recipe_ref?: string | null
           task_key?: string
+          updated_at?: string
+          updated_by?: string | null
         }
         Relationships: [
           {
@@ -138,6 +144,8 @@ export type Database = {
           qty: number
           recipe_title: string | null
           unit: string
+          updated_at: string
+          updated_by: string | null
         }
         Insert: {
           assigned_to?: string | null
@@ -151,6 +159,8 @@ export type Database = {
           qty?: number
           recipe_title?: string | null
           unit?: string
+          updated_at?: string
+          updated_by?: string | null
         }
         Update: {
           assigned_to?: string | null
@@ -164,6 +174,8 @@ export type Database = {
           qty?: number
           recipe_title?: string | null
           unit?: string
+          updated_at?: string
+          updated_by?: string | null
         }
         Relationships: [
           {
@@ -308,32 +320,41 @@ export type Database = {
         Row: {
           category: string
           created_at: string
+          created_by: string | null
           household_id: string
           id: string
           name: string
           qty: number
           recurring: boolean
           unit: string
+          updated_at: string
+          updated_by: string | null
         }
         Insert: {
           category?: string
           created_at?: string
+          created_by?: string | null
           household_id: string
           id?: string
           name: string
           qty?: number
           recurring?: boolean
           unit?: string
+          updated_at?: string
+          updated_by?: string | null
         }
         Update: {
           category?: string
           created_at?: string
+          created_by?: string | null
           household_id?: string
           id?: string
           name?: string
           qty?: number
           recurring?: boolean
           unit?: string
+          updated_at?: string
+          updated_by?: string | null
         }
         Relationships: [
           {
@@ -478,6 +499,7 @@ export type Database = {
           source_url: string
           tags: string[]
           updated_at: string
+          updated_by: string | null
           video_url: string | null
         }
         Insert: {
@@ -498,6 +520,7 @@ export type Database = {
           source_url?: string
           tags?: string[]
           updated_at?: string
+          updated_by?: string | null
           video_url?: string | null
         }
         Update: {
@@ -518,6 +541,7 @@ export type Database = {
           source_url?: string
           tags?: string[]
           updated_at?: string
+          updated_by?: string | null
           video_url?: string | null
         }
         Relationships: [

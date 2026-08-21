@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import { PageHeader, Screen } from "@/components/app-shell";
+import { EditedBy } from "@/components/edited-by";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -242,6 +243,7 @@ function Grocery() {
                         {CATEGORIES.find((c) => c.id === item.category)?.label}
                       </span>
                     )}
+                    <EditedBy userId={item.updatedBy} className="block truncate" />
                   </span>
                   <span className="shrink-0 font-bold text-primary">
                     {formatQty(item.qty, item.unit)}

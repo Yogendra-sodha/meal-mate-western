@@ -3,6 +3,7 @@ import { ChevronLeft, ChevronRight, Plus, Search, Sparkles, Trash2, Users } from
 import { useMemo, useState } from "react";
 
 import { PageHeader, Screen } from "@/components/app-shell";
+import { EditedBy } from "@/components/edited-by";
 import { RecipeEditor } from "@/components/recipe-editor";
 import { Button } from "@/components/ui/button";
 import {
@@ -125,6 +126,7 @@ function Planner() {
                       <p className="mt-1 inline-flex items-center gap-1 text-xs text-muted-foreground">
                         <Users className="h-3.5 w-3.5" /> {day.servings} plates
                       </p>
+                      <EditedBy userId={day.updatedBy} verb="planned" className="mt-0.5 block" />
                     </>
                   ) : (
                     <p className="mt-1 text-sm text-muted-foreground">{theme.hint}</p>

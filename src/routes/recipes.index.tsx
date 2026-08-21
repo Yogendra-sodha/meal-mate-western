@@ -3,6 +3,7 @@ import { Heart, Plus, Search, Star } from "lucide-react";
 import { useMemo, useState } from "react";
 
 import { PageHeader, Screen } from "@/components/app-shell";
+import { EditedBy } from "@/components/edited-by";
 import { RecipeEditor } from "@/components/recipe-editor";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -119,6 +120,7 @@ function RecipeList() {
                       Updated {formatUpdatedAt(r.updatedAt)}
                     </p>
                   ) : null}
+                  <EditedBy userId={r.updatedBy} className="mt-0.5 block" />
                 </Link>
                 <button
                   type="button"

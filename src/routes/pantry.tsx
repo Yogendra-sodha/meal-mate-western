@@ -4,6 +4,7 @@ import { useState } from "react";
 import { toast } from "sonner";
 
 import { PageHeader, Screen } from "@/components/app-shell";
+import { EditedBy } from "@/components/edited-by";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useAuth } from "@/lib/auth";
@@ -121,6 +122,7 @@ function Pantry() {
                     {item.recurring ? (
                       <span className="ml-2 text-xs font-normal text-muted-foreground">recurring</span>
                     ) : null}
+                    <EditedBy userId={item.updatedBy} className="ml-2 font-normal" />
                   </span>
                   <Input
                     value={String(item.qty)}

@@ -90,6 +90,7 @@ type RecipeRow = {
   source_url: string;
   video_url: string | null;
   updated_at: string;
+  updated_by: string | null;
 };
 
 function rowToRecipe(row: RecipeRow, ingredients: Recipe["ingredients"]): Recipe {
@@ -102,6 +103,7 @@ function rowToRecipe(row: RecipeRow, ingredients: Recipe["ingredients"]): Recipe
     sourceUrl: row.source_url,
     videoUrl: row.video_url ?? undefined,
     updatedAt: row.updated_at,
+    updatedBy: row.updated_by ?? undefined,
     prepMin: row.prep_min,
     cookMin: row.cook_min,
     baseServings: row.servings,
@@ -191,6 +193,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         servings: p.servings,
         cooked: p.cooked,
         note: p.note ?? undefined,
+        updatedBy: p.updated_by ?? undefined,
       };
     }
     const items = [...(planItemsRes.data ?? [])].sort((a, b) => a.position - b.position);
@@ -217,6 +220,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         label: t.name,
         assignee: t.assigned_to ?? undefined,
         done: t.completed,
+        updatedBy: t.updated_by ?? undefined,
       })),
       people: members.map((m) => ({ id: m.user_id, name: m.name })),
       inventory: (pantryRes.data ?? []).map((p) => ({
@@ -226,6 +230,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         qty: Number(p.qty),
         unit: p.unit,
         recurring: p.recurring,
+        updatedBy: p.updated_by ?? undefined,
       })),
       favorites: (favRes.data ?? []).map((f) => f.recipe_ref),
       ratings,
@@ -243,6 +248,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           done: g.purchased,
           addedAt: g.created_at,
           assignedTo: g.assigned_to ?? undefined,
+          updatedBy: g.updated_by ?? undefined,
         }))
         .sort((a, b) => a.addedAt.localeCompare(b.addedAt)),
       cookLog: (logRes.data ?? []).map((c) => ({ date: c.date, recipeId: c.recipe_ref })),
@@ -330,6 +336,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             source_url: recipe.sourceUrl,
             video_url: recipe.videoUrl ?? null,
             created_by: uid,
+            updated_by: uid,
             updated_at: new Date().toISOString(),
           },
           { onConflict: "household_id,slug" },
@@ -408,6 +415,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           assigned_to: t.assignee ?? null,
           completed: t.done,
           created_by: uid,
+          updated_by: uid,
+          updated_at: new Date().toISOString(),
         })),
         { onConflict: "household_id,task_key" },
       );
@@ -421,13 +430,15 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       kind?: string;
       date?: string;
       recipe_ref?: string | null;
+      updated_by?: string | null;
+      updated_at?: string;
     };
 
     const patchTask = async (taskKey: string, patch: TaskPatch) => {
       if (!hid) return;
       await supabase
         .from("cooking_tasks")
-        .update(patch)
+        .update({ ...patch, updated_by: uid, updated_at: new Date().toISOString() })
         .eq("household_id", hid)
         .eq("task_key", taskKey);
     };
@@ -502,7 +513,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         if (!hid) return;
         void supabase
           .from("meal_plans")
-          .update({ servings })
+          .update({ servings, updated_by: uid, updated_at: new Date().toISOString() })
           .eq("household_id", hid)
           .eq("date", date);
       },
@@ -538,7 +549,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           return d;
         });
         if (!hid) return;
-        void supabase.from("meal_plans").update({ cooked }).eq("household_id", hid).eq("date", date);
+        void supabase
+          .from("meal_plans")
+          .update({ cooked, updated_by: uid, updated_at: new Date().toISOString() })
+          .eq("household_id", hid)
+          .eq("date", date);
         if (cooked) {
           void supabase
             .from("cook_log")
@@ -648,13 +663,15 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           qty: item.qty,
           unit: item.unit,
           recurring: item.recurring,
+          updated_by: uid,
+          updated_at: new Date().toISOString(),
         };
         if (existing) {
           void supabase.from("pantry_items").update(payload).eq("id", item.id);
         } else {
           void supabase
             .from("pantry_items")
-            .insert({ ...payload, household_id: hid })
+            .insert({ ...payload, household_id: hid, created_by: uid })
             .then(() => load());
         }
       },
@@ -681,7 +698,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           .eq("user_id", id);
       },
       addRecipe: (recipe) => {
-        const stamped = { ...recipe, updatedAt: new Date().toISOString() };
+        const stamped = { ...recipe, updatedAt: new Date().toISOString(), updatedBy: uid ?? undefined };
         update((d) => {
           d.customRecipes.push(stamped);
           return d;
@@ -691,7 +708,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       updateRecipe: (id, patch) => {
         const base = recipesById[id];
         if (!base) return;
-        const next = { ...base, ...patch, id, updatedAt: new Date().toISOString() } as Recipe;
+        const next = { ...base, ...patch, id, updatedAt: new Date().toISOString(), updatedBy: uid ?? undefined } as Recipe;
         update((d) => {
           const custom = d.customRecipes.findIndex((r) => r.id === id);
           if (custom >= 0) d.customRecipes[custom] = next;
@@ -723,7 +740,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             if (c) c.qty = qty;
             return d;
           });
-          void supabase.from("grocery_items").update({ qty }).eq("id", existing.id);
+          void supabase
+            .from("grocery_items")
+            .update({ qty, updated_by: uid, updated_at: new Date().toISOString() })
+            .eq("id", existing.id);
           return;
         }
         void supabase
@@ -736,6 +756,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             category: item.category,
             recipe_title: item.recipeTitle ?? null,
             created_by: uid,
+            updated_by: uid,
+            updated_at: new Date().toISOString(),
           })
           .then(() => load());
       },
@@ -747,7 +769,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           if (c) c.done = done;
           return d;
         });
-        void supabase.from("grocery_items").update({ purchased: done }).eq("id", id);
+        void supabase
+          .from("grocery_items")
+          .update({ purchased: done, updated_by: uid, updated_at: new Date().toISOString() })
+          .eq("id", id);
       },
       removeCartItem: (id) => {
         update((d) => {
@@ -800,6 +825,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
               qty: i.qty,
               unit: i.unit,
               recurring: i.recurring,
+              created_by: uid,
+              updated_by: uid,
             })),
           );
           imported += local.inventory.length;

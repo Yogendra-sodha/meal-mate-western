@@ -49,6 +49,8 @@ export interface Recipe {
   videoUrl?: string | undefined;
   /** ISO timestamp of the last manual edit */
   updatedAt?: string | undefined;
+  /** user id of whoever last edited this recipe; no older editors are kept */
+  updatedBy?: string | undefined;
   prepMin: number;
   cookMin: number;
   /** all quantities are stated for this many plates */
@@ -66,6 +68,8 @@ export interface DayPlan {
   servings: number;
   note?: string | undefined;
   cooked?: boolean | undefined;
+  /** user id of whoever last changed this day; no older editors are kept */
+  updatedBy?: string | undefined;
 }
 
 export interface Person {
@@ -83,6 +87,8 @@ export interface Task {
   label: string;
   assignee?: string | undefined;
   done: boolean;
+  /** user id of whoever last changed this task; no older editors are kept */
+  updatedBy?: string | undefined;
 }
 
 export interface InventoryItem {
@@ -92,6 +98,8 @@ export interface InventoryItem {
   qty: number;
   unit: string;
   recurring: boolean;
+  /** user id of whoever last changed this item; no older editors are kept */
+  updatedBy?: string | undefined;
 }
 
 /** an item manually added to the shopping cart from a recipe */
@@ -107,6 +115,8 @@ export interface CartItem {
   addedAt: string;
   /** roommate assigned to buy this item */
   assignedTo?: string | undefined;
+  /** user id of whoever last changed this item; no older editors are kept */
+  updatedBy?: string | undefined;
 }
 
 export interface AppState {

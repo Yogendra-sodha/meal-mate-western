@@ -3,6 +3,7 @@ import { BarChart3, CheckCircle2, Clock, RefreshCw, Users, Utensils } from "luci
 import { useEffect, useMemo } from "react";
 
 import { PageHeader, Screen } from "@/components/app-shell";
+import { DailyVat } from "@/components/daily-vat";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
@@ -199,6 +200,8 @@ function Dashboard() {
           </Button>
         </div>
       )}
+
+      <DailyVat />
     </Screen>
   );
 }

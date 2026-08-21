@@ -29,6 +29,30 @@ export type Database = {
         }
         Relationships: []
       }
+      vato: {
+        Row: {
+          created_at: string
+          id: string
+          position: number
+          reference: string
+          text: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          position?: number
+          reference?: string
+          text: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          position?: number
+          reference?: string
+          text?: string
+        }
+        Relationships: []
+      }
       cook_log: {
         Row: {
           created_at: string

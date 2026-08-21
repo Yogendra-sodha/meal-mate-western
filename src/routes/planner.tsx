@@ -1,8 +1,9 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { ChevronLeft, ChevronRight, Sparkles, Trash2, Users } from "lucide-react";
-import { useState } from "react";
+import { ChevronLeft, ChevronRight, Plus, Search, Sparkles, Trash2, Users } from "lucide-react";
+import { useMemo, useState } from "react";
 
 import { PageHeader, Screen } from "@/components/app-shell";
+import { RecipeEditor } from "@/components/recipe-editor";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -11,6 +12,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   generateWeek,
@@ -22,6 +24,7 @@ import {
   suggestForDate,
 } from "@/lib/planning";
 import { useStore } from "@/lib/store";
+import { CUISINES, type Cuisine } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/planner")({
@@ -207,40 +210,127 @@ function PickDialog({
   recipes: ReturnType<typeof useStore>["recipes"];
   onPick: (id: string) => void;
 }) {
+  const store = useStore();
   const [open, setOpen] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const [q, setQ] = useState("");
+
+  const matches = useMemo(() => {
+    const needle = q.trim().toLowerCase();
+    if (!needle) return recipes;
+    return recipes.filter((r) =>
+      `${r.title} ${r.description} ${r.tags.join(" ")}`.toLowerCase().includes(needle),
+    );
+  }, [recipes, q]);
+
+  // Group by cuisine, keeping CUISINES order first and any unlisted cuisine after.
+  const groups = useMemo(() => {
+    const byCuisine = new Map<string, typeof matches>();
+    for (const r of matches) {
+      const list = byCuisine.get(r.cuisine) ?? [];
+      list.push(r);
+      byCuisine.set(r.cuisine, list);
+    }
+    const ordered = [
+      ...CUISINES.filter((c) => byCuisine.has(c)),
+      ...[...byCuisine.keys()].filter((c) => !CUISINES.includes(c as Cuisine)),
+    ];
+    return ordered.map((cuisine) => ({ cuisine, items: byCuisine.get(cuisine) ?? [] }));
+  }, [matches]);
+
+  const choose = (id: string) => {
+    onPick(id);
+    setOpen(false);
+    setQ("");
+  };
+
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        <Button size="sm" className="rounded-full">
-          Choose
-        </Button>
-      </DialogTrigger>
-      <DialogContent className="max-h-[80vh] max-w-md">
-        <DialogHeader>
-          <DialogTitle>Pick a dinner for {shortDayLabel(iso)}</DialogTitle>
-        </DialogHeader>
-        <ScrollArea className="h-[60vh] pr-2">
-          <ul className="space-y-2">
-            {recipes.map((r) => (
-              <li key={r.id}>
-                <button
-                  type="button"
-                  className="w-full rounded-xl bg-surface-2 px-4 py-3 text-left"
-                  onClick={() => {
-                    onPick(r.id);
-                    setOpen(false);
-                  }}
-                >
-                  <span className="block font-semibold">{r.title}</span>
-                  <span className="block text-xs text-muted-foreground">
-                    {r.cuisine} • {r.prepMin + r.cookMin} min
-                  </span>
-                </button>
-              </li>
-            ))}
-          </ul>
-        </ScrollArea>
-      </DialogContent>
-    </Dialog>
+    <>
+      <Dialog
+        open={open}
+        onOpenChange={(v) => {
+          setOpen(v);
+          if (!v) setQ("");
+        }}
+      >
+        <DialogTrigger asChild>
+          <Button size="sm" className="rounded-full">
+            Choose
+          </Button>
+        </DialogTrigger>
+        <DialogContent className="max-h-[80vh] max-w-md">
+          <DialogHeader>
+            <DialogTitle>Pick a dinner for {shortDayLabel(iso)}</DialogTitle>
+          </DialogHeader>
+
+          <div className="relative">
+            <Search className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              placeholder="Search dishes..."
+              className="h-11 rounded-full pl-11"
+            />
+          </div>
+
+          <Button
+            variant="outline"
+            className="h-11 w-full rounded-full"
+            onClick={() => {
+              setOpen(false);
+              setCreating(true);
+            }}
+          >
+            <Plus className="mr-1 h-4 w-4" /> Add a new recipe
+          </Button>
+
+          <ScrollArea className="h-[52vh] pr-2">
+            {groups.length === 0 ? (
+              <p className="px-1 py-6 text-center text-sm text-muted-foreground">
+                No dishes match "{q}". Add it as a new recipe.
+              </p>
+            ) : (
+              <div className="space-y-4">
+                {groups.map(({ cuisine, items }) => (
+                  <section key={cuisine}>
+                    <h3 className="mb-1.5 px-1 text-xs font-bold uppercase tracking-wide text-muted-foreground">
+                      {cuisine}
+                    </h3>
+                    <ul className="space-y-2">
+                      {items.map((r) => (
+                        <li key={r.id}>
+                          <button
+                            type="button"
+                            className="w-full rounded-xl bg-surface-2 px-4 py-3 text-left"
+                            onClick={() => choose(r.id)}
+                          >
+                            <span className="block font-semibold">{r.title}</span>
+                            <span className="block text-xs text-muted-foreground">
+                              {r.cuisine} • {r.prepMin + r.cookMin} min
+                            </span>
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  </section>
+                ))}
+              </div>
+            )}
+          </ScrollArea>
+        </DialogContent>
+      </Dialog>
+
+      {creating ? (
+        <RecipeEditor
+          mode="create"
+          open={creating}
+          onOpenChange={setCreating}
+          onSave={(r) => {
+            store.addRecipe(r);
+            onPick(r.id);
+          }}
+        />
+      ) : null}
+    </>
   );
 }

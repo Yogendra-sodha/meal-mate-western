@@ -7,7 +7,7 @@ import { toISODate } from "@/lib/planning";
 interface Vat {
   id: string;
   text: string;
-  reference: string;
+  reference: string | null;
 }
 
 /**
@@ -42,7 +42,7 @@ export function DailyVat() {
   if (!vat) return null;
 
   return (
-    <section className="surface-card mt-4 overflow-hidden">
+    <section className="surface-card mb-4 overflow-hidden">
       <div className="bg-surface-2 px-5 py-4">
         <p className="inline-flex items-center gap-1.5 text-xs font-bold uppercase tracking-wide text-primary">
           <Quote className="h-3.5 w-3.5" /> Swami ni Vat

@@ -34,21 +34,21 @@ export type Database = {
           created_at: string
           id: string
           position: number
-          reference: string
+          reference: string | null
           text: string
         }
         Insert: {
           created_at?: string
           id?: string
           position?: number
-          reference?: string
+          reference?: string | null
           text: string
         }
         Update: {
           created_at?: string
           id?: string
           position?: number
-          reference?: string
+          reference?: string | null
           text?: string
         }
         Relationships: []

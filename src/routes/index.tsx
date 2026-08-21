@@ -72,6 +72,8 @@ function Dashboard() {
         action={<ThemeToggle />}
       />
 
+      <DailyVat />
+
       {!day ? (
         <div className="surface-card p-6 text-center">
           <Utensils className="mx-auto h-8 w-8 text-primary" />
@@ -200,8 +202,6 @@ function Dashboard() {
           </Button>
         </div>
       )}
-
-      <DailyVat />
     </Screen>
   );
 }

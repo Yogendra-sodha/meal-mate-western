@@ -34,7 +34,7 @@ CREATE POLICY members_update_admin ON public.household_members
 CREATE TABLE IF NOT EXISTS public.vato (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   text text NOT NULL,
-  reference text NOT NULL DEFAULT '',
+  reference text,
   position integer NOT NULL DEFAULT 0,
   created_at timestamptz NOT NULL DEFAULT now()
 );
@@ -42,8 +42,9 @@ CREATE TABLE IF NOT EXISTS public.vato (
 CREATE INDEX IF NOT EXISTS vato_position_idx ON public.vato(position);
 
 -- Same text for everyone, so avoid storing the identical passage twice.
-CREATE UNIQUE INDEX IF NOT EXISTS vato_reference_key
-  ON public.vato(reference) WHERE reference <> '';
+-- Kept non-partial so ON CONFLICT (reference) can infer it; a vat with no
+-- citation stores NULL, and NULLs do not collide in a unique index.
+CREATE UNIQUE INDEX IF NOT EXISTS vato_reference_key ON public.vato(reference);
 
 ALTER TABLE public.vato ENABLE ROW LEVEL SECURITY;
 

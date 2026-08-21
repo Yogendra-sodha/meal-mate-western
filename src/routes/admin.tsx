@@ -66,7 +66,7 @@ interface AdminHousehold {
 interface Vat {
   id: string;
   text: string;
-  reference: string;
+  reference: string | null;
   position: number;
 }
 
@@ -631,7 +631,9 @@ function ImportVatoDialog({
       .upsert(
         parsed.map((v, i) => ({
           text: v.text,
-          reference: v.reference,
+          // NULL rather than "" so vato without a citation do not collide on
+          // the unique reference index.
+          reference: v.reference || null,
           position: existing + i + 1,
         })),
         { onConflict: "reference", ignoreDuplicates: true, count: "exact" },
@@ -691,7 +693,7 @@ function EditVatDialog({
   onSaved: () => void;
 }) {
   const [text, setText] = useState(vat.text);
-  const [reference, setReference] = useState(vat.reference);
+  const [reference, setReference] = useState(vat.reference ?? "");
   const [busy, setBusy] = useState(false);
 
   const save = async () => {
@@ -702,7 +704,7 @@ function EditVatDialog({
     setBusy(true);
     const { error } = await supabase
       .from("vato")
-      .update({ text: text.trim(), reference: reference.trim() })
+      .update({ text: text.trim(), reference: reference.trim() || null })
       .eq("id", vat.id);
     setBusy(false);
     if (error) toast.error(error.message);

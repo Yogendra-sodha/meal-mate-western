@@ -9,8 +9,13 @@ import {
 } from "@tanstack/react-router";
 import { useEffect, type ReactNode } from "react";
 
+// Must precede any import that can create the Supabase client: the client
+// clears the auth fragment from the URL as soon as it initialises.
+import "../lib/auth-redirect";
+
 import appCss from "../styles.css?url";
 import { BottomNav } from "../components/app-shell";
+import { AuthRedirectNotice } from "../components/auth-redirect-notice";
 import { StoreProvider } from "../lib/store";
 import { AuthProvider } from "../lib/auth";
 import { AuthGate } from "../components/auth-gate";
@@ -150,6 +155,7 @@ function RootComponent() {
           </StoreProvider>
         </AuthGate>
         <Toaster position="top-center" />
+        <AuthRedirectNotice />
       </AuthProvider>
     </QueryClientProvider>
   );

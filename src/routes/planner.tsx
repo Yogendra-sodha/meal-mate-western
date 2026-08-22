@@ -18,6 +18,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   generateWeek,
   shortDayLabel,
+  weekRangeLabel,
   toISODate,
   weekDates,
   WEEKDAY_THEMES,
@@ -65,7 +66,7 @@ function Planner() {
     <Screen>
       <PageHeader
         title="Weekly planner"
-        subtitle={`${shortDayLabel(dates[0]!)} – ${shortDayLabel(dates[6]!)}`}
+        subtitle={weekRangeLabel(dates[0]!, dates[6]!)}
         action={
           <div className="flex shrink-0 gap-1">
             <Button

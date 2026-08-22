@@ -16,7 +16,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { buildGroceryList, formatQty, shortDayLabel, toISODate, weekDates } from "@/lib/planning";
+import {
+  buildGroceryList,
+  formatQty,
+  shortDayLabel,
+  toISODate,
+  weekDates,
+  weekRangeLabel,
+} from "@/lib/planning";
 import { useStore } from "@/lib/store";
 import { type Category, CATEGORIES } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -93,7 +100,7 @@ function Grocery() {
         subtitle={
           range === "today"
             ? "For tonight's dinner"
-            : `${shortDayLabel(dates[0]!)} – ${shortDayLabel(dates[dates.length - 1]!)}`
+            : weekRangeLabel(dates[0]!, dates[dates.length - 1]!)
         }
         action={
           <Button

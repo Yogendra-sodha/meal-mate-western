@@ -66,7 +66,32 @@ export function dayLabel(iso: string) {
 }
 
 export function shortDayLabel(iso: string) {
-  return parseISODate(iso).toLocaleDateString(undefined, { weekday: "short", day: "numeric" });
+  return parseISODate(iso).toLocaleDateString(undefined, {
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+  });
+}
+
+/**
+ * Inclusive date range for a planned week, always carrying month and year.
+ *
+ * Uses Intl range formatting rather than joining two formatted dates by hand:
+ * the two ends share whatever they can, and — importantly — the day/month
+ * order follows the viewer's locale. Hand-assembling "17 – August 23, 2026"
+ * reads wrong in any locale that puts the month first.
+ */
+export function weekRangeLabel(startIso: string, endIso: string) {
+  const start = parseISODate(startIso);
+  const end = parseISODate(endIso);
+  const format = new Intl.DateTimeFormat(undefined, {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
+  return typeof format.formatRange === "function"
+    ? format.formatRange(start, end)
+    : `${format.format(start)} \u2013 ${format.format(end)}`;
 }
 
 /** Suggest a recipe for a date, respecting the weekday theme and avoiding recent repeats. */

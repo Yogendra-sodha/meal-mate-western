@@ -67,6 +67,20 @@ function Grocery() {
   anchor.setDate(anchor.getDate() + week * 7);
   const dates = range === "today" ? [toISODate(new Date())] : weekDates(anchor).map(toISODate);
 
+  // Every dish planned this week, whatever the today/week toggle shows — an
+  // item added on Monday may well be for Saturday's dish.
+  const weekDishes = useMemo(() => {
+    const titles = new Set<string>();
+    for (const iso of weekDates(anchor).map(toISODate)) {
+      for (const id of state.plan[iso]?.recipeIds ?? []) {
+        const title = recipesById[id]?.title;
+        if (title) titles.add(title);
+      }
+    }
+    return [...titles].sort((a, b) => a.localeCompare(b));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [week, state.plan, recipesById]);
+
   const lines = useMemo(
     () => buildGroceryList(dates, state, recipesById),
     [dates.join(","), state, recipesById],
@@ -127,7 +141,7 @@ function Grocery() {
       unit: item.unit,
       edited: false,
       category: item.category,
-      note: item.recipeTitle ? `For ${item.recipeTitle}` : "Added by hand",
+      note: item.recipeTitle ? `For ${item.recipeTitle}` : "Other",
       done: item.done,
       updatedBy: item.updatedBy,
       toggle: () => store.toggleCartItem(item.id),
@@ -372,6 +386,7 @@ function Grocery() {
           onAdd={store.addToCart}
           defaultCategory={addCategory}
           onOpenDefault={() => setAddCategory("vegetables")}
+          dishes={weekDishes}
         />
       </div>
 
@@ -418,6 +433,9 @@ function Grocery() {
     </Screen>
   );
 }
+
+/** Stands in for "not tied to a dish"; Radix Select rejects an empty value. */
+const NO_DISH = "__none__";
 
 /** Suggested units; the field stays free text so anything else can be typed. */
 const UNIT_SUGGESTIONS = [
@@ -599,6 +617,7 @@ function AddItemDialog({
   onAdd,
   defaultCategory = "vegetables",
   onOpenDefault,
+  dishes = [],
 }: {
   open: boolean;
   onOpenChange: (v: boolean) => void;
@@ -613,11 +632,16 @@ function AddItemDialog({
   defaultCategory?: Category;
   /** resets the caller's category when opened from the list-wide button */
   onOpenDefault?: (() => void) | undefined;
+  /** dishes planned this week, offered to tag the item against */
+  dishes?: string[];
 }) {
   const [name, setName] = useState("");
   const [qty, setQty] = useState("");
   const [unit, setUnit] = useState("kg");
   const [category, setCategory] = useState<Category>(defaultCategory);
+  // Radix Select cannot carry an empty value, so "not tied to a dish" needs a
+  // sentinel rather than "".
+  const [dish, setDish] = useState(NO_DISH);
 
   // Follow the section that opened the dialog, but leave the field free to
   // change once it is open.
@@ -630,6 +654,7 @@ function AddItemDialog({
     setQty("");
     setUnit("kg");
     setCategory(defaultCategory);
+    setDish(NO_DISH);
   };
 
   const submit = () => {
@@ -638,7 +663,13 @@ function AddItemDialog({
       toast.error("Enter an item name and quantity");
       return;
     }
-    onAdd({ name: name.trim(), qty: qtyNum, unit, category });
+    onAdd({
+      name: name.trim(),
+      qty: qtyNum,
+      unit,
+      category,
+      ...(dish !== NO_DISH ? { recipeTitle: dish } : {}),
+    });
     toast.success(`${name.trim()} added to cart`);
     reset();
     onOpenChange(false);
@@ -694,6 +725,28 @@ function AddItemDialog({
               </datalist>
             </div>
           </div>
+          <div className="space-y-1.5">
+            <Label>For which dish?</Label>
+            <Select value={dish} onValueChange={setDish}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={NO_DISH}>Other — not for a dish</SelectItem>
+                {dishes.map((d) => (
+                  <SelectItem key={d} value={d}>
+                    {d}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {dishes.length === 0 ? (
+              <p className="text-xs text-muted-foreground">
+                No dishes planned this week yet — the item will be filed under Other.
+              </p>
+            ) : null}
+          </div>
+
           <div className="space-y-1.5">
             <Label>Category</Label>
             <Select value={category} onValueChange={(v) => setCategory(v as Category)}>

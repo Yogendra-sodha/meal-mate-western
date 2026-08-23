@@ -7,7 +7,13 @@ import { PageHeader, Screen } from "@/components/app-shell";
 import { EditedBy } from "@/components/edited-by";
 import { SwipeToDelete } from "@/components/swipe-to-delete";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -66,13 +72,79 @@ function Grocery() {
     [dates.join(","), state, recipesById],
   );
 
-  // A swipe is easy to trigger by accident, so deleting offers a way back.
-  // Re-adding creates a fresh row, which is why the tick state is not restored.
-  const removeWithUndo = (item: (typeof state.cart)[number]) => {
+  /**
+   * One row shape for both kinds of item, so the list renders and behaves
+   * identically whether a line came from the meal plan or was added by hand.
+   * Planned lines are derived, so removing one flags it as dismissed rather
+   * than deleting a row.
+   */
+  type Row = {
+    id: string;
+    name: string;
+    qty: number;
+    unit: string;
+    category: Category;
+    note: string;
+    done: boolean;
+    updatedBy?: string | undefined;
+    toggle: () => void;
+    source: "planned" | "added";
+    key?: string;
+    item?: (typeof state.cart)[number];
+  };
+
+  const rows: Row[] = useMemo(() => {
+    const planned: Row[] = lines
+      .filter((l) => l.needed > 0 && !state.dismissed[l.key])
+      .map((l) => ({
+        id: `planned:${l.key}`,
+        name: l.name,
+        qty: l.needed,
+        unit: l.unit,
+        category: l.category,
+        note:
+          l.recipes.join(", ") +
+          (l.inStock > 0 ? ` • ${formatQty(l.inStock, l.unit)} in pantry` : ""),
+        done: !!state.purchased[l.key],
+        toggle: () => store.togglePurchased(l.key),
+        source: "planned",
+        key: l.key,
+      }));
+
+    const added: Row[] = state.cart.map((item) => ({
+      id: `added:${item.id}`,
+      name: item.name,
+      qty: item.qty,
+      unit: item.unit,
+      category: item.category,
+      note: item.recipeTitle ? `For ${item.recipeTitle}` : "Added by hand",
+      done: item.done,
+      updatedBy: item.updatedBy,
+      toggle: () => store.toggleCartItem(item.id),
+      source: "added",
+      item,
+    }));
+
+    return [...planned, ...added].sort((a, b) => a.name.localeCompare(b.name));
+  }, [lines, state.dismissed, state.purchased, state.cart, store]);
+
+  // Removal is easy to trigger by accident, so both kinds offer a way back.
+  const removeRow = (row: Row) => {
+    if (row.source === "planned" && row.key) {
+      const key = row.key;
+      store.dismissLine(key);
+      toast(`Removed ${row.name}`, {
+        action: { label: "Undo", onClick: () => store.restoreLine(key) },
+      });
+      return;
+    }
+    const item = row.item;
+    if (!item) return;
     store.removeCartItem(item.id);
     toast(`Removed ${item.name}`, {
       action: {
         label: "Undo",
+        // Re-adding creates a fresh row, so the tick state is not restored.
         onClick: () =>
           store.addToCart({
             name: item.name,
@@ -86,27 +158,18 @@ function Grocery() {
   };
 
   const [addOpen, setAddOpen] = useState(false);
-  const toBuy = lines.filter((l) => l.needed > 0);
-  const bought = toBuy.filter((l) => state.purchased[l.key]).length;
+  const bought = rows.filter((r) => r.done).length;
 
   const copyList = async () => {
     const text = CATEGORIES.map(({ id, label }) => {
-      const items = toBuy.filter((l) => l.category === id);
+      const items = rows.filter((r) => r.category === id);
       if (!items.length) return "";
-      return `${label}\n${items.map((l) => `- ${l.name}: ${formatQty(l.needed, l.unit)}`).join("\n")}`;
+      return `${label}\n${items.map((r) => `- ${r.name}: ${formatQty(r.qty, r.unit)}`).join("\n")}`;
     })
       .filter(Boolean)
       .join("\n\n");
-    const cartText = state.cart.length
-      ? `\n\nAdded from recipes\n${state.cart
-          .map(
-            (c) =>
-              `- ${c.name}: ${formatQty(c.qty, c.unit)}${c.recipeTitle ? ` (for ${c.recipeTitle})` : ""}`,
-          )
-          .join("\n")}`
-      : "";
     try {
-      await navigator.clipboard.writeText(`${text}${cartText}`.trim() || "Nothing to buy");
+      await navigator.clipboard.writeText(text.trim() || "Nothing to buy");
       toast.success("Grocery list copied");
     } catch {
       toast.error("Could not copy the list");
@@ -143,7 +206,9 @@ function Grocery() {
             onClick={() => setRange(r)}
             className={cn(
               "flex-1 rounded-full px-4 py-2.5 text-sm font-bold",
-              range === r ? "bg-primary text-primary-foreground" : "bg-surface-2 text-muted-foreground",
+              range === r
+                ? "bg-primary text-primary-foreground"
+                : "bg-surface-2 text-muted-foreground",
             )}
           >
             {r === "today" ? "Today" : "Whole week"}
@@ -153,7 +218,7 @@ function Grocery() {
 
       <div className="mb-4 flex items-center justify-between gap-3 rounded-2xl bg-primary-container px-4 py-3 text-primary-container-foreground">
         <p className="text-sm font-bold">
-          {bought}/{toBuy.length} items picked up
+          {bought}/{rows.length} items picked up
         </p>
         <Button
           variant="ghost"
@@ -165,14 +230,14 @@ function Grocery() {
         </Button>
       </div>
 
-      {toBuy.length === 0 ? (
+      {rows.length === 0 ? (
         <p className="surface-card p-6 text-center text-sm text-muted-foreground">
-          Nothing to buy — plan some dinners first, or your pantry already covers everything.
+          Nothing to buy — plan some dinners first, or add an item below.
         </p>
       ) : (
         <div className="space-y-4">
           {CATEGORIES.map(({ id, label, emoji }) => {
-            const items = toBuy.filter((l) => l.category === id);
+            const items = rows.filter((r) => r.category === id);
             if (!items.length) return null;
             return (
               <section key={id} className="surface-card overflow-hidden">
@@ -180,41 +245,54 @@ function Grocery() {
                   {emoji} {label}
                 </h2>
                 <ul>
-                  {items.map((line) => {
-                    const done = !!state.purchased[line.key];
-                    return (
-                      <li key={line.key} className="border-b border-border last:border-0">
-                        <button
-                          type="button"
-                          onClick={() => store.togglePurchased(line.key)}
-                          className="grid w-full grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 px-4 py-3 text-left"
-                        >
-                          <span
+                  {items.map((row) => (
+                    <li key={row.id} className="border-b border-border last:border-0">
+                      <SwipeToDelete onDelete={() => removeRow(row)}>
+                        <div className="grid grid-cols-[auto_minmax(0,1fr)_auto_auto] items-center gap-3 bg-background px-4 py-3">
+                          <button
+                            type="button"
+                            aria-label={`Mark ${row.name} as bought`}
+                            onClick={row.toggle}
                             className={cn(
                               "grid h-6 w-6 shrink-0 place-items-center rounded-md border-2",
-                              done ? "border-success bg-success text-success-foreground" : "border-border",
+                              row.done
+                                ? "border-success bg-success text-success-foreground"
+                                : "border-border",
                             )}
                           >
-                            {done ? <Check className="h-4 w-4" /> : null}
-                          </span>
+                            {row.done ? <Check className="h-4 w-4" /> : null}
+                          </button>
                           <span className="min-w-0">
-                            <span className={cn("block font-semibold", done && "line-through opacity-60")}>
-                              {line.name}
+                            <span
+                              className={cn(
+                                "block font-semibold",
+                                row.done && "line-through opacity-60",
+                              )}
+                            >
+                              {row.name}
                             </span>
-                            <span className="block truncate text-xs text-muted-foreground">
-                              {line.recipes.join(", ")}
-                              {line.inStock > 0
-                                ? ` • ${formatQty(line.inStock, line.unit)} in pantry`
-                                : ""}
-                            </span>
+                            {row.note ? (
+                              <span className="block truncate text-xs text-muted-foreground">
+                                {row.note}
+                              </span>
+                            ) : null}
+                            <EditedBy userId={row.updatedBy} className="block truncate" />
                           </span>
                           <span className="shrink-0 font-bold text-primary">
-                            {formatQty(line.needed, line.unit)}
+                            {formatQty(row.qty, row.unit)}
                           </span>
-                        </button>
-                      </li>
-                    );
-                  })}
+                          <button
+                            type="button"
+                            aria-label={`Remove ${row.name}`}
+                            onClick={() => removeRow(row)}
+                            className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-surface-2 text-muted-foreground"
+                          >
+                            <X className="h-4 w-4" />
+                          </button>
+                        </div>
+                      </SwipeToDelete>
+                    </li>
+                  ))}
                 </ul>
               </section>
             );
@@ -222,82 +300,10 @@ function Grocery() {
         </div>
       )}
 
-      <section className="surface-card mt-5 overflow-hidden">
-          <div className="flex items-center justify-between gap-3 bg-surface-2 px-4 py-2.5">
-            <h2 className="text-sm font-bold">
-              🛒 Shopping cart{state.cart.length ? ` (${state.cart.length})` : ""}
-            </h2>
-            {state.cart.length > 0 ? (
-              <Button
-                variant="ghost"
-                size="sm"
-                className="rounded-full"
-                onClick={() => store.clearCart()}
-              >
-                Clear
-              </Button>
-            ) : null}
-          </div>
-          {state.cart.length > 0 ? (
-            <ul>
-              {state.cart.map((item) => (
-                <li key={item.id} className="border-b border-border last:border-0">
-                <SwipeToDelete onDelete={() => removeWithUndo(item)}>
-                <div className="grid grid-cols-[auto_minmax(0,1fr)_auto_auto] items-center gap-3 bg-background px-4 py-3">
-                  <button
-                    type="button"
-                    aria-label={`Mark ${item.name} as bought`}
-                    onClick={() => store.toggleCartItem(item.id)}
-                    className={cn(
-                      "grid h-6 w-6 shrink-0 place-items-center rounded-md border-2",
-                      item.done ? "border-success bg-success text-success-foreground" : "border-border",
-                    )}
-                  >
-                    {item.done ? <Check className="h-4 w-4" /> : null}
-                  </button>
-                  <span className="min-w-0">
-                    <span className={cn("block font-semibold", item.done && "line-through opacity-60")}>
-                      {item.name}
-                    </span>
-                    {item.recipeTitle ? (
-                      <span className="block truncate text-xs text-muted-foreground">
-                        For {item.recipeTitle}
-                      </span>
-                    ) : (
-                      <span className="block truncate text-xs text-muted-foreground">
-                        {CATEGORIES.find((c) => c.id === item.category)?.emoji}{" "}
-                        {CATEGORIES.find((c) => c.id === item.category)?.label}
-                      </span>
-                    )}
-                    <EditedBy userId={item.updatedBy} className="block truncate" />
-                  </span>
-                  <span className="shrink-0 font-bold text-primary">
-                    {formatQty(item.qty, item.unit)}
-                  </span>
-                  <button
-                    type="button"
-                    aria-label={`Remove ${item.name}`}
-                    onClick={() => store.removeCartItem(item.id)}
-                    className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-surface-2 text-muted-foreground"
-                  >
-                    <X className="h-4 w-4" />
-                  </button>
-                </div>
-                </SwipeToDelete>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="px-4 py-3 text-sm text-muted-foreground">
-              Your cart is empty. Add items you need to buy — from recipes or manually.
-            </p>
-          )}
-          <div className="px-4 py-3">
-            <AddItemDialog open={addOpen} onOpenChange={setAddOpen} onAdd={store.addToCart} />
-          </div>
-        </section>
+      <div className="mt-4">
+        <AddItemDialog open={addOpen} onOpenChange={setAddOpen} onAdd={store.addToCart} />
+      </div>
     </Screen>
-
   );
 }
 
@@ -308,7 +314,13 @@ function AddItemDialog({
 }: {
   open: boolean;
   onOpenChange: (v: boolean) => void;
-  onAdd: (item: { name: string; qty: number; unit: string; category: Category; recipeTitle?: string }) => void;
+  onAdd: (item: {
+    name: string;
+    qty: number;
+    unit: string;
+    category: Category;
+    recipeTitle?: string;
+  }) => void;
 }) {
   const [name, setName] = useState("");
   const [qty, setQty] = useState("");

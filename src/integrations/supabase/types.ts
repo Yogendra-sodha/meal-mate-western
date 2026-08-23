@@ -146,16 +146,19 @@ export type Database = {
       }
       grocery_checks: {
         Row: {
+          dismissed: boolean
           household_id: string
           item_key: string
           purchased: boolean
         }
         Insert: {
+          dismissed?: boolean
           household_id: string
           item_key: string
           purchased?: boolean
         }
         Update: {
+          dismissed?: boolean
           household_id?: string
           item_key?: string
           purchased?: boolean

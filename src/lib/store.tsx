@@ -26,6 +26,7 @@ export const initialState: AppState = {
   favorites: [],
   ratings: {},
   purchased: {},
+  dismissed: {},
   customRecipes: [],
   recipeEdits: {},
   cart: [],
@@ -48,6 +49,9 @@ interface StoreValue {
   markCooked: (date: string) => void;
   togglePurchased: (key: string) => void;
   clearPurchased: () => void;
+  /** hide a generated grocery line; there is no row to delete, so it is flagged */
+  dismissLine: (key: string) => void;
+  restoreLine: (key: string) => void;
   ensureTasks: (date: string) => void;
   toggleTask: (id: string) => void;
   assignTask: (id: string, assignee?: string) => void;
@@ -203,7 +207,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     }
 
     const purchased: Record<string, boolean> = {};
-    for (const c of checksRes.data ?? []) purchased[c.item_key] = c.purchased;
+    const dismissed: Record<string, boolean> = {};
+    for (const c of checksRes.data ?? []) {
+      purchased[c.item_key] = c.purchased;
+      dismissed[c.item_key] = c.dismissed;
+    }
 
     const ratings: Record<string, number> = {};
     for (const r of ratingRes.data ?? []) {
@@ -235,6 +243,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       favorites: (favRes.data ?? []).map((f) => f.recipe_ref),
       ratings,
       purchased,
+      dismissed,
       customRecipes,
       recipeEdits,
       cart: (groceryRes.data ?? [])
@@ -569,16 +578,60 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           return d;
         });
         if (!hid) return;
+        // The upsert replaces the whole row, so restate the flag we are not
+        // changing rather than letting it fall back to its default.
         void supabase
           .from("grocery_checks")
           .upsert(
-            { household_id: hid, item_key: key, purchased: next },
+            {
+              household_id: hid,
+              item_key: key,
+              purchased: next,
+              dismissed: state.dismissed[key] ?? false,
+            },
+            { onConflict: "household_id,item_key" },
+          );
+      },
+      dismissLine: (key) => {
+        update((d) => {
+          d.dismissed[key] = true;
+          return d;
+        });
+        if (!hid) return;
+        void supabase
+          .from("grocery_checks")
+          .upsert(
+            {
+              household_id: hid,
+              item_key: key,
+              purchased: state.purchased[key] ?? false,
+              dismissed: true,
+            },
+            { onConflict: "household_id,item_key" },
+          );
+      },
+      restoreLine: (key) => {
+        update((d) => {
+          d.dismissed[key] = false;
+          return d;
+        });
+        if (!hid) return;
+        void supabase
+          .from("grocery_checks")
+          .upsert(
+            {
+              household_id: hid,
+              item_key: key,
+              purchased: state.purchased[key] ?? false,
+              dismissed: false,
+            },
             { onConflict: "household_id,item_key" },
           );
       },
       clearPurchased: () => {
         update((d) => {
           d.purchased = {};
+          d.dismissed = {};
           return d;
         });
         if (!hid) return;

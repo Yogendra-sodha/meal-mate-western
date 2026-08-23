@@ -127,6 +127,8 @@ export interface AppState {
   favorites: string[];
   ratings: Record<string, number>;
   purchased: Record<string, boolean>;
+  /** generated lines the household removed from the list, keyed like `purchased` */
+  dismissed: Record<string, boolean>;
   customRecipes: Recipe[];
   /** manual edits layered over the built-in recipe library */
   recipeEdits: Record<string, Partial<Recipe>>;

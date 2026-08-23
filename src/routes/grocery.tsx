@@ -5,6 +5,7 @@ import { toast } from "sonner";
 
 import { PageHeader, Screen } from "@/components/app-shell";
 import { EditedBy } from "@/components/edited-by";
+import { SwipeToDelete } from "@/components/swipe-to-delete";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -64,6 +65,25 @@ function Grocery() {
     () => buildGroceryList(dates, state, recipesById),
     [dates.join(","), state, recipesById],
   );
+
+  // A swipe is easy to trigger by accident, so deleting offers a way back.
+  // Re-adding creates a fresh row, which is why the tick state is not restored.
+  const removeWithUndo = (item: (typeof state.cart)[number]) => {
+    store.removeCartItem(item.id);
+    toast(`Removed ${item.name}`, {
+      action: {
+        label: "Undo",
+        onClick: () =>
+          store.addToCart({
+            name: item.name,
+            qty: item.qty,
+            unit: item.unit,
+            category: item.category,
+            ...(item.recipeTitle !== undefined ? { recipeTitle: item.recipeTitle } : {}),
+          }),
+      },
+    });
+  };
 
   const [addOpen, setAddOpen] = useState(false);
   const toBuy = lines.filter((l) => l.needed > 0);
@@ -221,10 +241,9 @@ function Grocery() {
           {state.cart.length > 0 ? (
             <ul>
               {state.cart.map((item) => (
-                <li
-                  key={item.id}
-                  className="grid grid-cols-[auto_minmax(0,1fr)_auto_auto] items-center gap-3 border-b border-border px-4 py-3 last:border-0"
-                >
+                <li key={item.id} className="border-b border-border last:border-0">
+                <SwipeToDelete onDelete={() => removeWithUndo(item)}>
+                <div className="grid grid-cols-[auto_minmax(0,1fr)_auto_auto] items-center gap-3 bg-background px-4 py-3">
                   <button
                     type="button"
                     aria-label={`Mark ${item.name} as bought`}
@@ -263,6 +282,8 @@ function Grocery() {
                   >
                     <X className="h-4 w-4" />
                   </button>
+                </div>
+                </SwipeToDelete>
                 </li>
               ))}
             </ul>

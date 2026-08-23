@@ -44,7 +44,10 @@ export function parseISODate(s: string) {
   return new Date(y ?? 1970, (m ?? 1) - 1, d ?? 1);
 }
 
-export function startOfWeek(d: Date, weekStartsOn = 1) {
+/** 0 = Sunday, so a planned week runs Sunday through Saturday. */
+export const WEEK_STARTS_ON = 0;
+
+export function startOfWeek(d: Date, weekStartsOn = WEEK_STARTS_ON) {
   const copy = new Date(d);
   const diff = (copy.getDay() - weekStartsOn + 7) % 7;
   copy.setDate(copy.getDate() - diff);

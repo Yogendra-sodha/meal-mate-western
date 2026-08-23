@@ -129,6 +129,8 @@ export interface AppState {
   purchased: Record<string, boolean>;
   /** generated lines the household removed from the list, keyed like `purchased` */
   dismissed: Record<string, boolean>;
+  /** manual amount/unit pinned onto a generated line, keyed like `purchased` */
+  overrides: Record<string, { qty: number; unit: string }>;
   customRecipes: Recipe[];
   /** manual edits layered over the built-in recipe library */
   recipeEdits: Record<string, Partial<Recipe>>;

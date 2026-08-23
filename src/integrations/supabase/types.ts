@@ -146,18 +146,24 @@ export type Database = {
       }
       grocery_checks: {
         Row: {
+          qty_override: number | null
+          unit_override: string | null
           dismissed: boolean
           household_id: string
           item_key: string
           purchased: boolean
         }
         Insert: {
+          qty_override?: number | null
+          unit_override?: string | null
           dismissed?: boolean
           household_id: string
           item_key: string
           purchased?: boolean
         }
         Update: {
+          qty_override?: number | null
+          unit_override?: string | null
           dismissed?: boolean
           household_id?: string
           item_key?: string

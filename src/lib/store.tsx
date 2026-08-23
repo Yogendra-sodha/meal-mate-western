@@ -27,6 +27,7 @@ export const initialState: AppState = {
   ratings: {},
   purchased: {},
   dismissed: {},
+  overrides: {},
   customRecipes: [],
   recipeEdits: {},
   cart: [],
@@ -52,6 +53,10 @@ interface StoreValue {
   /** hide a generated grocery line; there is no row to delete, so it is flagged */
   dismissLine: (key: string) => void;
   restoreLine: (key: string) => void;
+  /** pin a manual amount/unit onto a generated line */
+  setLineOverride: (key: string, qty: number, unit: string) => void;
+  clearLineOverride: (key: string) => void;
+  updateCartItem: (id: string, patch: { qty?: number; unit?: string }) => void;
   ensureTasks: (date: string) => void;
   toggleTask: (id: string) => void;
   assignTask: (id: string, assignee?: string) => void;
@@ -208,9 +213,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
     const purchased: Record<string, boolean> = {};
     const dismissed: Record<string, boolean> = {};
+    const overrides: AppState["overrides"] = {};
     for (const c of checksRes.data ?? []) {
       purchased[c.item_key] = c.purchased;
       dismissed[c.item_key] = c.dismissed;
+      if (c.qty_override !== null && c.unit_override !== null) {
+        overrides[c.item_key] = { qty: Number(c.qty_override), unit: c.unit_override };
+      }
     }
 
     const ratings: Record<string, number> = {};
@@ -244,6 +253,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       ratings,
       purchased,
       dismissed,
+      overrides,
       customRecipes,
       recipeEdits,
       cart: (groceryRes.data ?? [])
@@ -443,6 +453,36 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       updated_at?: string;
     };
 
+    /**
+     * grocery_checks holds several independent flags for one line, and an
+     * upsert replaces the whole row. Writing a patch on top of the current
+     * local state keeps one field's write from resetting the others.
+     */
+    const writeCheck = async (
+      key: string,
+      patch: {
+        purchased?: boolean;
+        dismissed?: boolean;
+        qty_override?: number | null;
+        unit_override?: string | null;
+      },
+    ) => {
+      if (!hid) return;
+      const override = state.overrides[key];
+      await supabase.from("grocery_checks").upsert(
+        {
+          household_id: hid,
+          item_key: key,
+          purchased: state.purchased[key] ?? false,
+          dismissed: state.dismissed[key] ?? false,
+          qty_override: override?.qty ?? null,
+          unit_override: override?.unit ?? null,
+          ...patch,
+        },
+        { onConflict: "household_id,item_key" },
+      );
+    };
+
     const patchTask = async (taskKey: string, patch: TaskPatch) => {
       if (!hid) return;
       await supabase
@@ -577,61 +617,41 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           d.purchased[key] = next;
           return d;
         });
-        if (!hid) return;
-        // The upsert replaces the whole row, so restate the flag we are not
-        // changing rather than letting it fall back to its default.
-        void supabase
-          .from("grocery_checks")
-          .upsert(
-            {
-              household_id: hid,
-              item_key: key,
-              purchased: next,
-              dismissed: state.dismissed[key] ?? false,
-            },
-            { onConflict: "household_id,item_key" },
-          );
+        void writeCheck(key, { purchased: next });
       },
       dismissLine: (key) => {
         update((d) => {
           d.dismissed[key] = true;
           return d;
         });
-        if (!hid) return;
-        void supabase
-          .from("grocery_checks")
-          .upsert(
-            {
-              household_id: hid,
-              item_key: key,
-              purchased: state.purchased[key] ?? false,
-              dismissed: true,
-            },
-            { onConflict: "household_id,item_key" },
-          );
+        void writeCheck(key, { dismissed: true });
       },
       restoreLine: (key) => {
         update((d) => {
           d.dismissed[key] = false;
           return d;
         });
-        if (!hid) return;
-        void supabase
-          .from("grocery_checks")
-          .upsert(
-            {
-              household_id: hid,
-              item_key: key,
-              purchased: state.purchased[key] ?? false,
-              dismissed: false,
-            },
-            { onConflict: "household_id,item_key" },
-          );
+        void writeCheck(key, { dismissed: false });
+      },
+      setLineOverride: (key, qty, unit) => {
+        update((d) => {
+          d.overrides[key] = { qty, unit };
+          return d;
+        });
+        void writeCheck(key, { qty_override: qty, unit_override: unit });
+      },
+      clearLineOverride: (key) => {
+        update((d) => {
+          delete d.overrides[key];
+          return d;
+        });
+        void writeCheck(key, { qty_override: null, unit_override: null });
       },
       clearPurchased: () => {
         update((d) => {
           d.purchased = {};
           d.dismissed = {};
+          d.overrides = {};
           return d;
         });
         if (!hid) return;
@@ -813,6 +833,17 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             updated_at: new Date().toISOString(),
           })
           .then(() => load());
+      },
+      updateCartItem: (id, patch) => {
+        update((d) => {
+          const c = d.cart.find((x) => x.id === id);
+          if (c) Object.assign(c, patch);
+          return d;
+        });
+        void supabase
+          .from("grocery_items")
+          .update({ ...patch, updated_by: uid, updated_at: new Date().toISOString() })
+          .eq("id", id);
       },
       toggleCartItem: (id) => {
         const current = state.cart.find((c) => c.id === id);

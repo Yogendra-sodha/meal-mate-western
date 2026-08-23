@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { Check, Plus, RotateCcw, Share2, X } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import { PageHeader, Screen } from "@/components/app-shell";
@@ -87,6 +87,10 @@ function Grocery() {
     note: string;
     done: boolean;
     updatedBy?: string | undefined;
+    /** true when a manual amount is pinned over the computed one */
+    edited?: boolean;
+    /** what the meal plan works out to, for the "back to computed" action */
+    computed?: { qty: number; unit: string };
     toggle: () => void;
     source: "planned" | "added";
     key?: string;
@@ -96,26 +100,32 @@ function Grocery() {
   const rows: Row[] = useMemo(() => {
     const planned: Row[] = lines
       .filter((l) => l.needed > 0 && !state.dismissed[l.key])
-      .map((l) => ({
-        id: `planned:${l.key}`,
-        name: l.name,
-        qty: l.needed,
-        unit: l.unit,
-        category: l.category,
-        note:
-          l.recipes.join(", ") +
-          (l.inStock > 0 ? ` • ${formatQty(l.inStock, l.unit)} in pantry` : ""),
-        done: !!state.purchased[l.key],
-        toggle: () => store.togglePurchased(l.key),
-        source: "planned",
-        key: l.key,
-      }));
+      .map((l) => {
+        const override = state.overrides[l.key];
+        return {
+          id: `planned:${l.key}`,
+          name: l.name,
+          qty: override ? override.qty : l.needed,
+          unit: override ? override.unit : l.unit,
+          edited: !!override,
+          computed: { qty: l.needed, unit: l.unit },
+          category: l.category,
+          note:
+            l.recipes.join(", ") +
+            (l.inStock > 0 ? ` • ${formatQty(l.inStock, l.unit)} in pantry` : ""),
+          done: !!state.purchased[l.key],
+          toggle: () => store.togglePurchased(l.key),
+          source: "planned" as const,
+          key: l.key,
+        };
+      });
 
     const added: Row[] = state.cart.map((item) => ({
       id: `added:${item.id}`,
       name: item.name,
       qty: item.qty,
       unit: item.unit,
+      edited: false,
       category: item.category,
       note: item.recipeTitle ? `For ${item.recipeTitle}` : "Added by hand",
       done: item.done,
@@ -126,7 +136,7 @@ function Grocery() {
     }));
 
     return [...planned, ...added].sort((a, b) => a.name.localeCompare(b.name));
-  }, [lines, state.dismissed, state.purchased, state.cart, store]);
+  }, [lines, state.dismissed, state.purchased, state.overrides, state.cart, store]);
 
   // Removal is easy to trigger by accident, so both kinds offer a way back.
   const removeRow = (row: Row) => {
@@ -158,7 +168,15 @@ function Grocery() {
   };
 
   const [addOpen, setAddOpen] = useState(false);
+  // Category the Add dialog opens on, set by whichever "+" was tapped.
+  const [addCategory, setAddCategory] = useState<Category>("vegetables");
+  const [editing, setEditing] = useState<Row | null>(null);
   const bought = rows.filter((r) => r.done).length;
+
+  const saveAmount = (row: Row, qty: number, unit: string) => {
+    if (row.source === "planned" && row.key) store.setLineOverride(row.key, qty, unit);
+    else if (row.item) store.updateCartItem(row.item.id, { qty, unit });
+  };
 
   const copyList = async () => {
     const text = CATEGORIES.map(({ id, label }) => {
@@ -241,9 +259,22 @@ function Grocery() {
             if (!items.length) return null;
             return (
               <section key={id} className="surface-card overflow-hidden">
-                <h2 className="bg-surface-2 px-4 py-2.5 text-sm font-bold">
-                  {emoji} {label}
-                </h2>
+                <div className="flex items-center justify-between gap-3 bg-surface-2 px-4 py-2.5">
+                  <h2 className="text-sm font-bold">
+                    {emoji} {label}
+                  </h2>
+                  <button
+                    type="button"
+                    aria-label={`Add an item to ${label}`}
+                    onClick={() => {
+                      setAddCategory(id);
+                      setAddOpen(true);
+                    }}
+                    className="grid h-7 w-7 place-items-center rounded-full bg-background text-primary"
+                  >
+                    <Plus className="h-4 w-4" />
+                  </button>
+                </div>
                 <ul>
                   {items.map((row) => (
                     <li key={row.id} className="border-b border-border last:border-0">
@@ -278,9 +309,17 @@ function Grocery() {
                             ) : null}
                             <EditedBy userId={row.updatedBy} className="block truncate" />
                           </span>
-                          <span className="shrink-0 font-bold text-primary">
+                          <button
+                            type="button"
+                            onClick={() => setEditing(row)}
+                            aria-label={`Edit amount for ${row.name}`}
+                            className={cn(
+                              "shrink-0 rounded-full px-2 py-1 font-bold text-primary",
+                              row.edited && "underline decoration-dotted underline-offset-4",
+                            )}
+                          >
                             {formatQty(row.qty, row.unit)}
-                          </span>
+                          </button>
                           <button
                             type="button"
                             aria-label={`Remove ${row.name}`}
@@ -301,9 +340,143 @@ function Grocery() {
       )}
 
       <div className="mt-4">
-        <AddItemDialog open={addOpen} onOpenChange={setAddOpen} onAdd={store.addToCart} />
+        <AddItemDialog
+          open={addOpen}
+          onOpenChange={setAddOpen}
+          onAdd={store.addToCart}
+          defaultCategory={addCategory}
+          onOpenDefault={() => setAddCategory("vegetables")}
+        />
       </div>
+
+      {editing ? (
+        <EditAmountDialog
+          row={editing}
+          onClose={() => setEditing(null)}
+          onSave={(qty, unit) => saveAmount(editing, qty, unit)}
+          {...(editing.source === "planned" && editing.key
+            ? { onResetToComputed: () => store.clearLineOverride(editing.key!) }
+            : {})}
+        />
+      ) : null}
     </Screen>
+  );
+}
+
+/** Suggested units; the field stays free text so anything else can be typed. */
+const UNIT_SUGGESTIONS = [
+  "kg",
+  "g",
+  "lbs",
+  "oz",
+  "L",
+  "ml",
+  "pcs",
+  "pieces",
+  "pack",
+  "bunch",
+  "cup",
+  "tbsp",
+  "tsp",
+];
+
+function EditAmountDialog({
+  row,
+  onClose,
+  onSave,
+  onResetToComputed,
+}: {
+  row: {
+    name: string;
+    qty: number;
+    unit: string;
+    edited?: boolean;
+    computed?: { qty: number; unit: string };
+  };
+  onClose: () => void;
+  onSave: (qty: number, unit: string) => void;
+  onResetToComputed?: (() => void) | undefined;
+}) {
+  const [qty, setQty] = useState(String(row.qty));
+  const [unit, setUnit] = useState(row.unit);
+
+  const save = () => {
+    const n = Number(qty);
+    if (!Number.isFinite(n) || n <= 0) {
+      toast.error("Enter an amount greater than zero");
+      return;
+    }
+    if (!unit.trim()) {
+      toast.error("Enter a unit");
+      return;
+    }
+    onSave(n, unit.trim());
+    onClose();
+  };
+
+  return (
+    <Dialog open onOpenChange={(v) => !v && onClose()}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>{row.name}</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4 pt-2">
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label htmlFor="edit-qty">Amount</Label>
+              <Input
+                id="edit-qty"
+                type="number"
+                inputMode="decimal"
+                value={qty}
+                onChange={(e) => setQty(e.target.value)}
+                autoFocus
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="edit-unit">Unit</Label>
+              <Input
+                id="edit-unit"
+                list="unit-suggestions"
+                value={unit}
+                onChange={(e) => setUnit(e.target.value)}
+                placeholder="kg"
+              />
+              <datalist id="unit-suggestions">
+                {UNIT_SUGGESTIONS.map((u) => (
+                  <option key={u} value={u} />
+                ))}
+              </datalist>
+            </div>
+          </div>
+
+          {row.computed ? (
+            <p className="text-xs text-muted-foreground">
+              The plan works out to {formatQty(row.computed.qty, row.computed.unit)}. Setting your
+              own amount pins it, so it stops changing when the plan or servings change.
+            </p>
+          ) : null}
+
+          <div className="flex gap-2">
+            <Button className="flex-1" size="lg" onClick={save}>
+              Save
+            </Button>
+            {row.edited && onResetToComputed ? (
+              <Button
+                variant="outline"
+                size="lg"
+                onClick={() => {
+                  onResetToComputed();
+                  onClose();
+                }}
+              >
+                Use plan amount
+              </Button>
+            ) : null}
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -311,6 +484,8 @@ function AddItemDialog({
   open,
   onOpenChange,
   onAdd,
+  defaultCategory = "vegetables",
+  onOpenDefault,
 }: {
   open: boolean;
   onOpenChange: (v: boolean) => void;
@@ -321,17 +496,27 @@ function AddItemDialog({
     category: Category;
     recipeTitle?: string;
   }) => void;
+  /** category to preselect, set by whichever section's "+" opened this */
+  defaultCategory?: Category;
+  /** resets the caller's category when opened from the list-wide button */
+  onOpenDefault?: (() => void) | undefined;
 }) {
   const [name, setName] = useState("");
   const [qty, setQty] = useState("");
   const [unit, setUnit] = useState("kg");
-  const [category, setCategory] = useState<Category>("vegetables");
+  const [category, setCategory] = useState<Category>(defaultCategory);
+
+  // Follow the section that opened the dialog, but leave the field free to
+  // change once it is open.
+  useEffect(() => {
+    if (open) setCategory(defaultCategory);
+  }, [open, defaultCategory]);
 
   const reset = () => {
     setName("");
     setQty("");
     setUnit("kg");
-    setCategory("vegetables");
+    setCategory(defaultCategory);
   };
 
   const submit = () => {
@@ -349,7 +534,7 @@ function AddItemDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogTrigger asChild>
-        <Button className="w-full rounded-full" size="lg">
+        <Button className="w-full rounded-full" size="lg" onClick={() => onOpenDefault?.()}>
           <Plus className="mr-1.5 h-5 w-5" /> Add item to cart
         </Button>
       </DialogTrigger>
@@ -382,18 +567,18 @@ function AddItemDialog({
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="add-unit">Unit</Label>
-              <Select value={unit} onValueChange={setUnit}>
-                <SelectTrigger id="add-unit">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {["kg", "g", "L", "ml", "pcs", "pack", "bunch", "cup", "tbsp", "tsp"].map((u) => (
-                    <SelectItem key={u} value={u}>
-                      {u}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Input
+                id="add-unit"
+                list="unit-suggestions"
+                value={unit}
+                onChange={(e) => setUnit(e.target.value)}
+                placeholder="kg"
+              />
+              <datalist id="unit-suggestions">
+                {UNIT_SUGGESTIONS.map((u) => (
+                  <option key={u} value={u} />
+                ))}
+              </datalist>
             </div>
           </div>
           <div className="space-y-1.5">

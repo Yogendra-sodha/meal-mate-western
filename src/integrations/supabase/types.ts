@@ -29,6 +29,33 @@ export type Database = {
         }
         Relationships: []
       }
+      shopping_trips: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          done_on: string
+          household_id: string
+          id: string
+          items: Json
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          done_on?: string
+          household_id: string
+          id?: string
+          items?: Json
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          done_on?: string
+          household_id?: string
+          id?: string
+          items?: Json
+        }
+        Relationships: []
+      }
       vato: {
         Row: {
           created_at: string

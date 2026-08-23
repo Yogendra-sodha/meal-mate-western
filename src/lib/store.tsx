@@ -6,6 +6,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
 import type {
   AppState,
+  ShoppingTrip,
   CartItem,
   Category,
   Cuisine,
@@ -28,6 +29,7 @@ export const initialState: AppState = {
   purchased: {},
   dismissed: {},
   overrides: {},
+  trips: [],
   customRecipes: [],
   recipeEdits: {},
   cart: [],
@@ -50,6 +52,8 @@ interface StoreValue {
   markCooked: (date: string) => void;
   togglePurchased: (key: string) => void;
   clearPurchased: () => void;
+  /** archive the finished shop and start the list over */
+  finishShopping: (items: ShoppingTrip["items"]) => Promise<void>;
   /** hide a generated grocery line; there is no row to delete, so it is flagged */
   dismissLine: (key: string) => void;
   restoreLine: (key: string) => void;
@@ -157,6 +161,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       ratingRes,
       checksRes,
       logRes,
+      tripsRes,
     ] = await Promise.all([
       supabase.from("recipes").select("*").eq("household_id", householdId),
       supabase.from("recipe_ingredients").select("*"),
@@ -169,6 +174,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       supabase.from("recipe_ratings").select("*").eq("household_id", householdId),
       supabase.from("grocery_checks").select("*").eq("household_id", householdId),
       supabase.from("cook_log").select("*").eq("household_id", householdId),
+      // Capped: the archive is for glancing back a few weeks, and the whole
+      // history would otherwise ride along on every load.
+      supabase
+        .from("shopping_trips")
+        .select("id, done_on, items")
+        .eq("household_id", householdId)
+        .order("done_on", { ascending: false })
+        .limit(12),
     ]);
 
     const ingByRecipe = new Map<string, Recipe["ingredients"]>();
@@ -254,6 +267,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       purchased,
       dismissed,
       overrides,
+      trips: (tripsRes.data ?? []).map((t) => ({
+        id: t.id,
+        doneOn: t.done_on,
+        items: (t.items ?? []) as ShoppingTrip["items"],
+      })),
       customRecipes,
       recipeEdits,
       cart: (groceryRes.data ?? [])
@@ -300,6 +318,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       "recipe_ratings",
       "grocery_checks",
       "cook_log",
+      "shopping_trips",
     ];
     const channel = supabase.channel(`household-${householdId}`);
     for (const table of tables) {
@@ -646,6 +665,17 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           return d;
         });
         void writeCheck(key, { qty_override: null, unit_override: null });
+      },
+      finishShopping: async (items) => {
+        if (!hid) return;
+        await supabase
+          .from("shopping_trips")
+          .insert({ household_id: hid, items, created_by: uid });
+        // The shop is done, so the list starts over: ticks, removals and pinned
+        // amounts all belonged to this trip, as did the hand-added items.
+        await supabase.from("grocery_checks").delete().eq("household_id", hid);
+        await supabase.from("grocery_items").delete().eq("household_id", hid);
+        await load();
       },
       clearPurchased: () => {
         update((d) => {

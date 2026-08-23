@@ -119,6 +119,13 @@ export interface CartItem {
   updatedBy?: string | undefined;
 }
 
+/** A past shop, kept only as much as a past shop needs. */
+export interface ShoppingTrip {
+  id: string;
+  doneOn: string;
+  items: { name: string; qty: number; unit: string; category: Category }[];
+}
+
 export interface AppState {
   plan: Record<string, DayPlan>;
   tasks: Task[];
@@ -131,6 +138,8 @@ export interface AppState {
   dismissed: Record<string, boolean>;
   /** manual amount/unit pinned onto a generated line, keyed like `purchased` */
   overrides: Record<string, { qty: number; unit: string }>;
+  /** most recent completed shops, newest first */
+  trips: ShoppingTrip[];
   customRecipes: Recipe[];
   /** manual edits layered over the built-in recipe library */
   recipeEdits: Record<string, Partial<Recipe>>;

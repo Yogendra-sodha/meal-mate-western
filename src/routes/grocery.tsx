@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { Check, Plus, RotateCcw, Share2, X } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { Check, ChevronDown, Plus, RotateCcw, Share2, X } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { PageHeader, Screen } from "@/components/app-shell";
@@ -32,7 +32,7 @@ import {
   weekRangeLabel,
 } from "@/lib/planning";
 import { useStore } from "@/lib/store";
-import { type Category, CATEGORIES } from "@/lib/types";
+import { type AppState, type Category, CATEGORIES } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/grocery")({
@@ -171,7 +171,33 @@ function Grocery() {
   // Category the Add dialog opens on, set by whichever "+" was tapped.
   const [addCategory, setAddCategory] = useState<Category>("vegetables");
   const [editing, setEditing] = useState<Row | null>(null);
+  const [finishOpen, setFinishOpen] = useState(false);
+  const [finishing, setFinishing] = useState(false);
   const bought = rows.filter((r) => r.done).length;
+  const allDone = rows.length > 0 && bought === rows.length;
+
+  // Ask once when the list first becomes complete. Re-arms only after the list
+  // is incomplete again, so unticking and reticking one item does not nag.
+  const asked = useRef(false);
+  useEffect(() => {
+    if (!allDone) {
+      asked.current = false;
+      return;
+    }
+    if (asked.current) return;
+    asked.current = true;
+    setFinishOpen(true);
+  }, [allDone]);
+
+  const finishShopping = async () => {
+    setFinishing(true);
+    await store.finishShopping(
+      rows.map((r) => ({ name: r.name, qty: r.qty, unit: r.unit, category: r.category })),
+    );
+    setFinishing(false);
+    setFinishOpen(false);
+    toast.success("Shop saved — the list is ready for next time");
+  };
 
   const saveAmount = (row: Row, qty: number, unit: string) => {
     if (row.source === "planned" && row.key) store.setLineOverride(row.key, qty, unit);
@@ -349,6 +375,36 @@ function Grocery() {
         />
       </div>
 
+      <PastShops trips={state.trips} />
+
+      <Dialog open={finishOpen} onOpenChange={setFinishOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Shopping done?</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 pt-2">
+            <p className="text-sm text-muted-foreground">
+              All {rows.length} items are ticked off. Saving files them under past shops and starts
+              a fresh list — ticks, removed lines, edited amounts and anything added by hand are
+              cleared.
+            </p>
+            <div className="flex gap-2">
+              <Button
+                className="flex-1"
+                size="lg"
+                onClick={() => void finishShopping()}
+                disabled={finishing}
+              >
+                Yes, save it
+              </Button>
+              <Button variant="outline" size="lg" onClick={() => setFinishOpen(false)}>
+                Not yet
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       {editing ? (
         <EditAmountDialog
           row={editing}
@@ -379,6 +435,63 @@ const UNIT_SUGGESTIONS = [
   "tbsp",
   "tsp",
 ];
+
+/** Recent completed shops, collapsed until one is opened. */
+function PastShops({ trips }: { trips: AppState["trips"] }) {
+  const [openId, setOpenId] = useState<string | null>(null);
+  if (!trips.length) return null;
+
+  return (
+    <section className="surface-card mt-5 overflow-hidden">
+      <h2 className="bg-surface-2 px-4 py-2.5 text-sm font-bold">🧾 Past shops</h2>
+      <ul>
+        {trips.map((trip) => {
+          const open = openId === trip.id;
+          return (
+            <li key={trip.id} className="border-b border-border last:border-0">
+              <button
+                type="button"
+                onClick={() => setOpenId(open ? null : trip.id)}
+                className="grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-3 px-4 py-3 text-left"
+              >
+                <span className="min-w-0">
+                  <span className="block font-semibold">
+                    {new Date(trip.doneOn + "T00:00:00").toLocaleDateString(undefined, {
+                      day: "numeric",
+                      month: "short",
+                      year: "numeric",
+                    })}
+                  </span>
+                  <span className="block text-xs text-muted-foreground">
+                    {trip.items.length} item{trip.items.length === 1 ? "" : "s"}
+                  </span>
+                </span>
+                <ChevronDown
+                  className={cn("h-4 w-4 shrink-0 text-muted-foreground", open && "rotate-180")}
+                />
+              </button>
+              {open ? (
+                <ul className="bg-surface-2 px-4 py-2">
+                  {trip.items.map((item, i) => (
+                    <li
+                      key={`${item.name}-${i}`}
+                      className="grid grid-cols-[minmax(0,1fr)_auto] gap-3 py-1 text-sm"
+                    >
+                      <span className="min-w-0 truncate">{item.name}</span>
+                      <span className="shrink-0 font-semibold text-primary">
+                        {formatQty(item.qty, item.unit)}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+            </li>
+          );
+        })}
+      </ul>
+    </section>
+  );
+}
 
 function EditAmountDialog({
   row,

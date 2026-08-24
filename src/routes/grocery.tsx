@@ -5,6 +5,7 @@ import { toast } from "sonner";
 
 import { PageHeader, Screen } from "@/components/app-shell";
 import { EditedBy } from "@/components/edited-by";
+import { PastShops } from "@/components/past-shops";
 import { SwipeToDelete } from "@/components/swipe-to-delete";
 import { Button } from "@/components/ui/button";
 import {
@@ -222,6 +223,8 @@ function Grocery() {
   const [editing, setEditing] = useState<Row | null>(null);
   const [finishOpen, setFinishOpen] = useState(false);
   const [finishing, setFinishing] = useState(false);
+  const [store_, setStore] = useState("");
+  const [total, setTotal] = useState("");
   const bought = rows.filter((r) => r.done).length;
   const allDone = rows.length > 0 && bought === rows.length;
 
@@ -245,9 +248,15 @@ function Grocery() {
       weekStart,
       // Lines removed from this week's list: not bought, but not wanted back.
       lines.filter((l) => state.dismissed[l.key]).map((l) => l.name),
+      {
+        store: store_.trim() || undefined,
+        total: Number(total) > 0 ? Number(total) : undefined,
+      },
     );
     setFinishing(false);
     setFinishOpen(false);
+    setStore("");
+    setTotal("");
     toast.success("Shop saved — the list is ready for next time");
   };
 
@@ -462,7 +471,7 @@ function Grocery() {
         />
       </div>
 
-      <PastShops trips={state.trips} />
+      <PastShops trips={state.trips} className="mt-5" />
 
       <Dialog open={finishOpen} onOpenChange={setFinishOpen}>
         <DialogContent>
@@ -475,6 +484,35 @@ function Grocery() {
               them off this week's list. Anything added to the plan afterwards still shows up, and
               next week starts clean.
             </p>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="finish-store">Store (optional)</Label>
+                <Input
+                  id="finish-store"
+                  list="store-suggestions"
+                  value={store_}
+                  onChange={(e) => setStore(e.target.value)}
+                  placeholder="Patel Grocery"
+                />
+                <datalist id="store-suggestions">
+                  {STORE_SUGGESTIONS.map((n) => (
+                    <option key={n} value={n} />
+                  ))}
+                </datalist>
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="finish-total">Bill total (optional)</Label>
+                <Input
+                  id="finish-total"
+                  type="number"
+                  inputMode="decimal"
+                  value={total}
+                  onChange={(e) => setTotal(e.target.value)}
+                  placeholder="0.00"
+                />
+              </div>
+            </div>
+
             <div className="flex gap-2">
               <Button
                 className="flex-1"
@@ -509,6 +547,17 @@ function Grocery() {
 /** Stands in for "not tied to a dish"; Radix Select rejects an empty value. */
 const NO_DISH = "__none__";
 
+/** Offered when saving a shop; the field stays free text for anywhere else. */
+const STORE_SUGGESTIONS = [
+  "Patel Grocery",
+  "JFK Grocery",
+  "Stop and Shop",
+  "ShopRite",
+  "Walmart",
+  "Costco",
+  "Instacart",
+];
+
 /** Suggested units; the field stays free text so anything else can be typed. */
 const UNIT_SUGGESTIONS = [
   "kg",
@@ -525,63 +574,6 @@ const UNIT_SUGGESTIONS = [
   "tbsp",
   "tsp",
 ];
-
-/** Recent completed shops, collapsed until one is opened. */
-function PastShops({ trips }: { trips: AppState["trips"] }) {
-  const [openId, setOpenId] = useState<string | null>(null);
-  if (!trips.length) return null;
-
-  return (
-    <section className="surface-card mt-5 overflow-hidden">
-      <h2 className="bg-surface-2 px-4 py-2.5 text-sm font-bold">🧾 Past shops</h2>
-      <ul>
-        {trips.map((trip) => {
-          const open = openId === trip.id;
-          return (
-            <li key={trip.id} className="border-b border-border last:border-0">
-              <button
-                type="button"
-                onClick={() => setOpenId(open ? null : trip.id)}
-                className="grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-3 px-4 py-3 text-left"
-              >
-                <span className="min-w-0">
-                  <span className="block font-semibold">
-                    {new Date(trip.doneOn + "T00:00:00").toLocaleDateString(undefined, {
-                      day: "numeric",
-                      month: "short",
-                      year: "numeric",
-                    })}
-                  </span>
-                  <span className="block text-xs text-muted-foreground">
-                    {trip.items.length} item{trip.items.length === 1 ? "" : "s"}
-                  </span>
-                </span>
-                <ChevronDown
-                  className={cn("h-4 w-4 shrink-0 text-muted-foreground", open && "rotate-180")}
-                />
-              </button>
-              {open ? (
-                <ul className="bg-surface-2 px-4 py-2">
-                  {trip.items.map((item, i) => (
-                    <li
-                      key={`${item.name}-${i}`}
-                      className="grid grid-cols-[minmax(0,1fr)_auto] gap-3 py-1 text-sm"
-                    >
-                      <span className="min-w-0 truncate">{item.name}</span>
-                      <span className="shrink-0 font-semibold text-primary">
-                        {formatQty(item.qty, item.unit)}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              ) : null}
-            </li>
-          );
-        })}
-      </ul>
-    </section>
-  );
-}
 
 function EditAmountDialog({
   row,

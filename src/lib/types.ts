@@ -127,6 +127,10 @@ export interface ShoppingTrip {
   coversWeek: string;
   /** names removed from the list during this shop; kept off that week too */
   skipped: string[];
+  /** optional: where the shop was done */
+  store?: string | undefined;
+  /** optional: what the shop came to */
+  total?: number | undefined;
   items: { name: string; qty: number; unit: string; category: Category }[];
 }
 

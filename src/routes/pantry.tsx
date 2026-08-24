@@ -5,6 +5,7 @@ import { toast } from "sonner";
 
 import { PageHeader, Screen } from "@/components/app-shell";
 import { EditedBy } from "@/components/edited-by";
+import { PastShops } from "@/components/past-shops";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useAuth } from "@/lib/auth";
@@ -73,7 +74,12 @@ function Pantry() {
       <section className="surface-card mb-4 p-4">
         <h2 className="font-bold">Add an item</h2>
         <div className="mt-3 grid grid-cols-[minmax(0,1fr)_5rem_4.5rem] gap-2">
-          <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Item" className="h-11" />
+          <Input
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="Item"
+            className="h-11"
+          />
           <Input
             value={qty}
             onChange={(e) => setQty(e.target.value)}
@@ -81,7 +87,12 @@ function Pantry() {
             placeholder="Qty"
             className="h-11"
           />
-          <Input value={unit} onChange={(e) => setUnit(e.target.value)} placeholder="kg" className="h-11" />
+          <Input
+            value={unit}
+            onChange={(e) => setUnit(e.target.value)}
+            placeholder="kg"
+            className="h-11"
+          />
         </div>
         <div className="mt-2 flex flex-wrap gap-2">
           {CATEGORIES.map((c) => (
@@ -91,7 +102,9 @@ function Pantry() {
               onClick={() => setCategory(c.id)}
               className={cn(
                 "rounded-full px-3 py-1.5 text-xs font-bold",
-                category === c.id ? "bg-primary text-primary-foreground" : "bg-surface-2 text-muted-foreground",
+                category === c.id
+                  ? "bg-primary text-primary-foreground"
+                  : "bg-surface-2 text-muted-foreground",
               )}
             >
               {c.emoji} {c.label}
@@ -120,7 +133,9 @@ function Pantry() {
                   <span className="min-w-0 truncate text-sm font-semibold">
                     {item.name}
                     {item.recurring ? (
-                      <span className="ml-2 text-xs font-normal text-muted-foreground">recurring</span>
+                      <span className="ml-2 text-xs font-normal text-muted-foreground">
+                        recurring
+                      </span>
                     ) : null}
                     <EditedBy userId={item.updatedBy} className="ml-2 font-normal" />
                   </span>
@@ -216,6 +231,8 @@ function Pantry() {
           <LogOut className="mr-2 h-4 w-4" /> Sign out
         </Button>
       </section>
+
+      <PastShops trips={store.state.trips} className="mt-5" />
 
       <Button variant="outline" className="mt-4 h-12 w-full rounded-full" onClick={exportData}>
         <Download className="mr-2 h-4 w-4" /> Export all data (JSON)

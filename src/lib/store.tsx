@@ -57,6 +57,7 @@ interface StoreValue {
     items: ShoppingTrip["items"],
     coversWeek: string,
     skipped: string[],
+    details?: { store?: string | undefined; total?: number | undefined },
   ) => Promise<void>;
   /** drop an archived shop so its week's planned lines come back */
   undoShopping: (tripId: string) => Promise<void>;
@@ -184,7 +185,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       // history would otherwise ride along on every load.
       supabase
         .from("shopping_trips")
-        .select("id, done_on, covers_week, items, skipped")
+        .select("id, done_on, covers_week, items, skipped, store, total")
         .eq("household_id", householdId)
         .order("done_on", { ascending: false })
         .limit(12),
@@ -278,6 +279,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         doneOn: t.done_on,
         coversWeek: t.covers_week ?? t.done_on,
         skipped: (t.skipped ?? []) as string[],
+        ...(t.store ? { store: t.store } : {}),
+        ...(t.total !== null && t.total !== undefined ? { total: Number(t.total) } : {}),
         items: (t.items ?? []) as ShoppingTrip["items"],
       })),
       customRecipes,
@@ -674,13 +677,15 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         });
         void writeCheck(key, { qty_override: null, unit_override: null });
       },
-      finishShopping: async (items, coversWeek, skipped) => {
+      finishShopping: async (items, coversWeek, skipped, details) => {
         if (!hid) return;
         await supabase.from("shopping_trips").insert({
           household_id: hid,
           items,
           skipped,
           covers_week: coversWeek,
+          store: details?.store?.trim() || null,
+          total: details?.total ?? null,
           created_by: uid,
         });
         // The shop is done, so the list starts over: ticks, removals and pinned

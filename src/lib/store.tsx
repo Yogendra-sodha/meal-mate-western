@@ -53,7 +53,9 @@ interface StoreValue {
   togglePurchased: (key: string) => void;
   clearPurchased: () => void;
   /** archive the finished shop and start the list over */
-  finishShopping: (items: ShoppingTrip["items"]) => Promise<void>;
+  finishShopping: (items: ShoppingTrip["items"], coversWeek: string) => Promise<void>;
+  /** drop an archived shop so its week's planned lines come back */
+  undoShopping: (tripId: string) => Promise<void>;
   /** hide a generated grocery line; there is no row to delete, so it is flagged */
   dismissLine: (key: string) => void;
   restoreLine: (key: string) => void;
@@ -178,7 +180,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       // history would otherwise ride along on every load.
       supabase
         .from("shopping_trips")
-        .select("id, done_on, items")
+        .select("id, done_on, covers_week, items")
         .eq("household_id", householdId)
         .order("done_on", { ascending: false })
         .limit(12),
@@ -270,6 +272,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       trips: (tripsRes.data ?? []).map((t) => ({
         id: t.id,
         doneOn: t.done_on,
+        coversWeek: t.covers_week ?? t.done_on,
         items: (t.items ?? []) as ShoppingTrip["items"],
       })),
       customRecipes,
@@ -666,15 +669,23 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         });
         void writeCheck(key, { qty_override: null, unit_override: null });
       },
-      finishShopping: async (items) => {
+      finishShopping: async (items, coversWeek) => {
         if (!hid) return;
         await supabase
           .from("shopping_trips")
-          .insert({ household_id: hid, items, created_by: uid });
+          .insert({ household_id: hid, items, covers_week: coversWeek, created_by: uid });
         // The shop is done, so the list starts over: ticks, removals and pinned
         // amounts all belonged to this trip, as did the hand-added items.
         await supabase.from("grocery_checks").delete().eq("household_id", hid);
         await supabase.from("grocery_items").delete().eq("household_id", hid);
+        await load();
+      },
+      undoShopping: async (tripId) => {
+        if (!hid) return;
+        // Removing the trip is enough: planned lines are derived, so they
+        // reappear. Hand-added items were deleted when the shop was saved and
+        // are not recoverable from the archive.
+        await supabase.from("shopping_trips").delete().eq("id", tripId);
         await load();
       },
       clearPurchased: () => {

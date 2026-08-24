@@ -123,6 +123,8 @@ export interface CartItem {
 export interface ShoppingTrip {
   id: string;
   doneOn: string;
+  /** week start this shop was for; its items stay hidden from that week */
+  coversWeek: string;
   items: { name: string; qty: number; unit: string; category: Category }[];
 }
 

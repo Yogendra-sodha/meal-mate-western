@@ -81,6 +81,27 @@ function Grocery() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [week, state.plan, recipesById]);
 
+  const weekStart = toISODate(weekDates(anchor)[0]!);
+
+  /**
+   * Shops already done for this week. Their items are matched by name alone,
+   * not name+unit, so an amount edited to different units before shopping
+   * still counts as bought.
+   */
+  const boughtThisWeek = useMemo(() => {
+    const names = new Set<string>();
+    for (const trip of state.trips) {
+      if (trip.coversWeek !== weekStart) continue;
+      for (const item of trip.items) names.add(item.name.toLowerCase());
+    }
+    return names;
+  }, [state.trips, weekStart]);
+
+  const shoppedTrip = useMemo(
+    () => state.trips.find((t) => t.coversWeek === weekStart) ?? null,
+    [state.trips, weekStart],
+  );
+
   const lines = useMemo(
     () => buildGroceryList(dates, state, recipesById),
     [dates.join(","), state, recipesById],
@@ -113,7 +134,9 @@ function Grocery() {
 
   const rows: Row[] = useMemo(() => {
     const planned: Row[] = lines
-      .filter((l) => l.needed > 0 && !state.dismissed[l.key])
+      .filter(
+        (l) => l.needed > 0 && !state.dismissed[l.key] && !boughtThisWeek.has(l.name.toLowerCase()),
+      )
       .map((l) => {
         const override = state.overrides[l.key];
         return {
@@ -150,7 +173,7 @@ function Grocery() {
     }));
 
     return [...planned, ...added].sort((a, b) => a.name.localeCompare(b.name));
-  }, [lines, state.dismissed, state.purchased, state.overrides, state.cart, store]);
+  }, [lines, state.dismissed, state.purchased, state.overrides, state.cart, boughtThisWeek, store]);
 
   // Removal is easy to trigger by accident, so both kinds offer a way back.
   const removeRow = (row: Row) => {
@@ -207,6 +230,7 @@ function Grocery() {
     setFinishing(true);
     await store.finishShopping(
       rows.map((r) => ({ name: r.name, qty: r.qty, unit: r.unit, category: r.category })),
+      weekStart,
     );
     setFinishing(false);
     setFinishOpen(false);
@@ -288,9 +312,43 @@ function Grocery() {
         </Button>
       </div>
 
+      {shoppedTrip ? (
+        <div className="surface-card mb-4 flex items-center justify-between gap-3 p-4">
+          <p className="min-w-0 text-sm">
+            <span className="font-bold">Shopped for this week</span>
+            <span className="block text-xs text-muted-foreground">
+              {shoppedTrip.items.length} items on{" "}
+              {new Date(shoppedTrip.doneOn + "T00:00:00").toLocaleDateString(undefined, {
+                day: "numeric",
+                month: "short",
+              })}
+              . Anything added to the plan since shows below.
+            </span>
+          </p>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="shrink-0 rounded-full"
+            onClick={() => {
+              if (
+                !window.confirm(
+                  "Bring this week's list back? Items you added by hand were cleared when the shop was saved and will not return.",
+                )
+              )
+                return;
+              void store.undoShopping(shoppedTrip.id);
+            }}
+          >
+            Undo
+          </Button>
+        </div>
+      ) : null}
+
       {rows.length === 0 ? (
         <p className="surface-card p-6 text-center text-sm text-muted-foreground">
-          Nothing to buy — plan some dinners first, or add an item below.
+          {shoppedTrip
+            ? "Everything for this week is bought."
+            : "Nothing to buy — plan some dinners first, or add an item below."}
         </p>
       ) : (
         <div className="space-y-4">
@@ -399,9 +457,9 @@ function Grocery() {
           </DialogHeader>
           <div className="space-y-4 pt-2">
             <p className="text-sm text-muted-foreground">
-              All {rows.length} items are ticked off. Saving files them under past shops and starts
-              a fresh list — ticks, removed lines, edited amounts and anything added by hand are
-              cleared.
+              All {rows.length} items are ticked off. Saving files them under past shops and takes
+              them off this week's list. Anything added to the plan afterwards still shows up, and
+              next week starts clean.
             </p>
             <div className="flex gap-2">
               <Button

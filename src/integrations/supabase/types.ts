@@ -31,6 +31,7 @@ export type Database = {
       }
       shopping_trips: {
         Row: {
+          covers_week: string | null
           created_at: string
           created_by: string | null
           done_on: string
@@ -39,6 +40,7 @@ export type Database = {
           items: Json
         }
         Insert: {
+          covers_week?: string | null
           created_at?: string
           created_by?: string | null
           done_on?: string
@@ -47,6 +49,7 @@ export type Database = {
           items?: Json
         }
         Update: {
+          covers_week?: string | null
           created_at?: string
           created_by?: string | null
           done_on?: string

@@ -471,7 +471,12 @@ function Grocery() {
         />
       </div>
 
-      <PastShops trips={state.trips} className="mt-5" />
+      <PastShops
+        trips={state.trips}
+        className="mt-5"
+        onlyWeek={weekStart}
+        title="Shops for this week"
+      />
 
       <Dialog open={finishOpen} onOpenChange={setFinishOpen}>
         <DialogContent>

@@ -125,6 +125,8 @@ export interface ShoppingTrip {
   doneOn: string;
   /** week start this shop was for; its items stay hidden from that week */
   coversWeek: string;
+  /** names removed from the list during this shop; kept off that week too */
+  skipped: string[];
   items: { name: string; qty: number; unit: string; category: Category }[];
 }
 

@@ -88,11 +88,14 @@ function Grocery() {
    * not name+unit, so an amount edited to different units before shopping
    * still counts as bought.
    */
-  const boughtThisWeek = useMemo(() => {
+  const handledThisWeek = useMemo(() => {
     const names = new Set<string>();
     for (const trip of state.trips) {
       if (trip.coversWeek !== weekStart) continue;
       for (const item of trip.items) names.add(item.name.toLowerCase());
+      // Skipped lines were removed on purpose; finishing the shop clears the
+      // dismissal flags, so the trip is what keeps them off this week.
+      for (const name of trip.skipped) names.add(name.toLowerCase());
     }
     return names;
   }, [state.trips, weekStart]);
@@ -135,7 +138,8 @@ function Grocery() {
   const rows: Row[] = useMemo(() => {
     const planned: Row[] = lines
       .filter(
-        (l) => l.needed > 0 && !state.dismissed[l.key] && !boughtThisWeek.has(l.name.toLowerCase()),
+        (l) =>
+          l.needed > 0 && !state.dismissed[l.key] && !handledThisWeek.has(l.name.toLowerCase()),
       )
       .map((l) => {
         const override = state.overrides[l.key];
@@ -173,7 +177,15 @@ function Grocery() {
     }));
 
     return [...planned, ...added].sort((a, b) => a.name.localeCompare(b.name));
-  }, [lines, state.dismissed, state.purchased, state.overrides, state.cart, boughtThisWeek, store]);
+  }, [
+    lines,
+    state.dismissed,
+    state.purchased,
+    state.overrides,
+    state.cart,
+    handledThisWeek,
+    store,
+  ]);
 
   // Removal is easy to trigger by accident, so both kinds offer a way back.
   const removeRow = (row: Row) => {
@@ -231,6 +243,8 @@ function Grocery() {
     await store.finishShopping(
       rows.map((r) => ({ name: r.name, qty: r.qty, unit: r.unit, category: r.category })),
       weekStart,
+      // Lines removed from this week's list: not bought, but not wanted back.
+      lines.filter((l) => state.dismissed[l.key]).map((l) => l.name),
     );
     setFinishing(false);
     setFinishOpen(false);

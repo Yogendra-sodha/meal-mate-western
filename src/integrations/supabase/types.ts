@@ -31,6 +31,7 @@ export type Database = {
       }
       shopping_trips: {
         Row: {
+          skipped: Json
           covers_week: string | null
           created_at: string
           created_by: string | null
@@ -40,6 +41,7 @@ export type Database = {
           items: Json
         }
         Insert: {
+          skipped?: Json
           covers_week?: string | null
           created_at?: string
           created_by?: string | null
@@ -49,6 +51,7 @@ export type Database = {
           items?: Json
         }
         Update: {
+          skipped?: Json
           covers_week?: string | null
           created_at?: string
           created_by?: string | null

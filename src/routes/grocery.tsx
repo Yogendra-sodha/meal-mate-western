@@ -265,20 +265,48 @@ function Grocery() {
     else if (row.item) store.updateCartItem(row.item.id, { qty, unit });
   };
 
-  const copyList = async () => {
-    const text = CATEGORIES.map(({ id, label }) => {
+  /**
+   * Shares whatever the list currently holds: copies it, then hands it to
+   * WhatsApp with the message already written.
+   *
+   * Both the copy and the hand-off start synchronously inside the click,
+   * because awaiting the clipboard first ends the user gesture — iOS then
+   * refuses the write and blocks the new tab.
+   */
+  const shareList = () => {
+    if (!rows.length) {
+      toast("Nothing to share yet");
+      return;
+    }
+
+    const heading =
+      range === "today"
+        ? `Grocery list — ${shortDayLabel(dates[0]!)}`
+        : `Grocery list — ${weekRangeLabel(dates[0]!, dates[dates.length - 1]!)}`;
+
+    const body = CATEGORIES.map(({ id, label }) => {
       const items = rows.filter((r) => r.category === id);
       if (!items.length) return "";
-      return `${label}\n${items.map((r) => `- ${r.name}: ${formatQty(r.qty, r.unit)}`).join("\n")}`;
+      // Picked-up items stay in, ticked, so whoever reads it sees the whole
+      // list and still knows what is left.
+      const itemLines = items.map(
+        (r) => `${r.done ? "✅" : "•"} ${r.name} — ${formatQty(r.qty, r.unit)}`,
+      );
+      return `*${label}*\n${itemLines.join("\n")}`;
     })
       .filter(Boolean)
       .join("\n\n");
-    try {
-      await navigator.clipboard.writeText(text.trim() || "Nothing to buy");
-      toast.success("Grocery list copied");
-    } catch {
-      toast.error("Could not copy the list");
-    }
+
+    const text = `*${heading}*\n\n${body}`;
+
+    navigator.clipboard?.writeText(text).catch(() => {
+      // WhatsApp still gets the full list, so a failed copy is not worth a toast.
+    });
+
+    const url = `https://wa.me/?text=${encodeURIComponent(text)}`;
+    // Falls back to navigating in place where a new tab is blocked.
+    if (!window.open(url, "_blank", "noopener,noreferrer")) window.location.href = url;
+    toast.success("List copied — opening WhatsApp");
   };
 
   return (
@@ -295,8 +323,8 @@ function Grocery() {
             variant="secondary"
             size="icon"
             className="h-11 w-11 rounded-full"
-            onClick={copyList}
-            aria-label="Copy list"
+            onClick={shareList}
+            aria-label="Share list on WhatsApp"
           >
             <Share2 className="h-5 w-5" />
           </Button>

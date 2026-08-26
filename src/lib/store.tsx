@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
+import { toast } from "sonner";
 
 import { RECIPES } from "@/data/recipes";
 import { supabase } from "@/integrations/supabase/client";
@@ -18,6 +19,23 @@ import type {
 export const LOCAL_STORAGE_KEY = "bdp.state.v1";
 
 const BUILTIN_IDS = new Set(RECIPES.map((r) => r.id));
+
+/**
+ * Sends a write the caller does not wait on.
+ *
+ * A PostgREST builder is lazy: it only issues its request once something calls
+ * `then` on it. `void supabase.from(...).delete()...` therefore builds a
+ * request and drops it — the screen updates, nothing reaches the server, and
+ * the change is gone at the next load. Every unwaited write goes through here
+ * so that it is actually sent, and a rejected one says so instead of vanishing.
+ */
+function send(write: PromiseLike<{ error: { message: string } | null }>, what: string) {
+  void Promise.resolve(write).then(({ error }) => {
+    if (!error) return;
+    console.error(`[store] could not save ${what}:`, error.message);
+    toast.error(`Could not save ${what}`, { id: `save-failed-${what}` });
+  });
+}
 
 export const initialState: AppState = {
   plan: {},
@@ -537,13 +555,16 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           return d;
         });
         if (!hid) return;
-        void (on
-          ? supabase
-              .from("recipe_favorites")
-              .delete()
-              .eq("household_id", hid)
-              .eq("recipe_ref", id)
-          : supabase.from("recipe_favorites").insert({ household_id: hid, recipe_ref: id }));
+        send(
+          on
+            ? supabase
+                .from("recipe_favorites")
+                .delete()
+                .eq("household_id", hid)
+                .eq("recipe_ref", id)
+            : supabase.from("recipe_favorites").insert({ household_id: hid, recipe_ref: id }),
+          "the favourite",
+        );
       },
       rate: (id, value) => {
         update((d) => {
@@ -551,12 +572,15 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           return d;
         });
         if (!hid || !uid) return;
-        void supabase
-          .from("recipe_ratings")
-          .upsert(
-            { household_id: hid, recipe_ref: id, user_id: uid, value },
-            { onConflict: "household_id,recipe_ref,user_id" },
-          );
+        send(
+          supabase
+            .from("recipe_ratings")
+            .upsert(
+              { household_id: hid, recipe_ref: id, user_id: uid, value },
+              { onConflict: "household_id,recipe_ref,user_id" },
+            ),
+          "the rating",
+        );
       },
       setDay: (date, recipeIds, servings) => {
         const next = servings ?? state.plan[date]?.servings ?? state.defaultServings;
@@ -581,8 +605,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           return d;
         });
         if (!hid) return;
-        void supabase.from("meal_plans").delete().eq("household_id", hid).eq("date", date);
-        void supabase.from("cooking_tasks").delete().eq("household_id", hid).eq("date", date);
+        send(
+          supabase.from("meal_plans").delete().eq("household_id", hid).eq("date", date),
+          "the cleared day",
+        );
+        send(
+          supabase.from("cooking_tasks").delete().eq("household_id", hid).eq("date", date),
+          "the cleared day",
+        );
       },
       setServings: (date, servings) => {
         update((d) => {
@@ -590,11 +620,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           return d;
         });
         if (!hid) return;
-        void supabase
-          .from("meal_plans")
-          .update({ servings, updated_by: uid, updated_at: new Date().toISOString() })
-          .eq("household_id", hid)
-          .eq("date", date);
+        send(
+          supabase
+            .from("meal_plans")
+            .update({ servings, updated_by: uid, updated_at: new Date().toISOString() })
+            .eq("household_id", hid)
+            .eq("date", date),
+          "the servings",
+        );
       },
       swapDays: (a, b) => {
         const pa = state.plan[a];
@@ -628,18 +661,22 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           return d;
         });
         if (!hid) return;
-        void supabase
-          .from("meal_plans")
-          .update({ cooked, updated_by: uid, updated_at: new Date().toISOString() })
-          .eq("household_id", hid)
-          .eq("date", date);
-        if (cooked) {
-          void supabase
-            .from("cook_log")
-            .insert(day.recipeIds.map((rid) => ({ household_id: hid, date, recipe_ref: rid })));
-        } else {
-          void supabase.from("cook_log").delete().eq("household_id", hid).eq("date", date);
-        }
+        send(
+          supabase
+            .from("meal_plans")
+            .update({ cooked, updated_by: uid, updated_at: new Date().toISOString() })
+            .eq("household_id", hid)
+            .eq("date", date),
+          "the cooked mark",
+        );
+        send(
+          cooked
+            ? supabase
+                .from("cook_log")
+                .insert(day.recipeIds.map((rid) => ({ household_id: hid, date, recipe_ref: rid })))
+            : supabase.from("cook_log").delete().eq("household_id", hid).eq("date", date),
+          "the cook log",
+        );
       },
       togglePurchased: (key) => {
         const next = !state.purchased[key];
@@ -710,7 +747,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           return d;
         });
         if (!hid) return;
-        void supabase.from("grocery_checks").delete().eq("household_id", hid);
+        send(supabase.from("grocery_checks").delete().eq("household_id", hid), "the reset list");
       },
       ensureTasks: (date) => {
         if (state.tasks.some((t) => t.date === date)) return;
@@ -774,7 +811,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           return d;
         });
         if (!hid) return;
-        void supabase.from("cooking_tasks").delete().eq("household_id", hid).eq("task_key", id);
+        send(
+          supabase.from("cooking_tasks").delete().eq("household_id", hid).eq("task_key", id),
+          "the removed task",
+        );
       },
       upsertInventory: (item) => {
         const existing = state.inventory.find((i) => i.id === item.id);
@@ -795,7 +835,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           updated_at: new Date().toISOString(),
         };
         if (existing) {
-          void supabase.from("pantry_items").update(payload).eq("id", item.id);
+          send(supabase.from("pantry_items").update(payload).eq("id", item.id), "the pantry item");
         } else {
           void supabase
             .from("pantry_items")
@@ -808,7 +848,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           d.inventory = d.inventory.filter((i) => i.id !== id);
           return d;
         });
-        void supabase.from("pantry_items").delete().eq("id", id);
+        send(supabase.from("pantry_items").delete().eq("id", id), "the removed pantry item");
       },
       addPerson: () => {
         /* roommates join with the household invite code */
@@ -819,11 +859,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           return d;
         });
         if (!hid) return;
-        void supabase
-          .from("household_members")
-          .delete()
-          .eq("household_id", hid)
-          .eq("user_id", id);
+        send(
+          supabase.from("household_members").delete().eq("household_id", hid).eq("user_id", id),
+          "the removed member",
+        );
       },
       addRecipe: (recipe) => {
         const stamped = { ...recipe, updatedAt: new Date().toISOString(), updatedBy: uid ?? undefined };
@@ -851,7 +890,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           return d;
         });
         if (!hid) return;
-        void supabase.from("recipes").delete().eq("household_id", hid).eq("slug", id);
+        send(
+          supabase.from("recipes").delete().eq("household_id", hid).eq("slug", id),
+          "the reset recipe",
+        );
       },
       addToCart: (item) => {
         if (!hid) return;
@@ -868,10 +910,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             if (c) c.qty = qty;
             return d;
           });
-          void supabase
-            .from("grocery_items")
-            .update({ qty, updated_by: uid, updated_at: new Date().toISOString() })
-            .eq("id", existing.id);
+          send(
+            supabase
+              .from("grocery_items")
+              .update({ qty, updated_by: uid, updated_at: new Date().toISOString() })
+              .eq("id", existing.id),
+            "the item",
+          );
           return;
         }
         void supabase
@@ -895,10 +940,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           if (c) Object.assign(c, patch);
           return d;
         });
-        void supabase
-          .from("grocery_items")
-          .update({ ...patch, updated_by: uid, updated_at: new Date().toISOString() })
-          .eq("id", id);
+        send(
+          supabase
+            .from("grocery_items")
+            .update({ ...patch, updated_by: uid, updated_at: new Date().toISOString() })
+            .eq("id", id),
+          "the amount",
+        );
       },
       toggleCartItem: (id) => {
         const current = state.cart.find((c) => c.id === id);
@@ -908,17 +956,20 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           if (c) c.done = done;
           return d;
         });
-        void supabase
-          .from("grocery_items")
-          .update({ purchased: done, updated_by: uid, updated_at: new Date().toISOString() })
-          .eq("id", id);
+        send(
+          supabase
+            .from("grocery_items")
+            .update({ purchased: done, updated_by: uid, updated_at: new Date().toISOString() })
+            .eq("id", id),
+          "the tick",
+        );
       },
       removeCartItem: (id) => {
         update((d) => {
           d.cart = d.cart.filter((c) => c.id !== id);
           return d;
         });
-        void supabase.from("grocery_items").delete().eq("id", id);
+        send(supabase.from("grocery_items").delete().eq("id", id), "the removal");
       },
       clearCart: () => {
         update((d) => {
@@ -926,7 +977,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           return d;
         });
         if (!hid) return;
-        void supabase.from("grocery_items").delete().eq("household_id", hid);
+        send(supabase.from("grocery_items").delete().eq("household_id", hid), "the cleared list");
       },
       reset: () => setState(initialState),
       importLocalData: async () => {

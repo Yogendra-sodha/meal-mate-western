@@ -14,6 +14,75 @@ export type Database = {
   }
   public: {
     Tables: {
+      ai_settings: {
+        Row: {
+          household_id: string
+          enabled: boolean
+          daily_calls_per_user: number
+          monthly_cost_cap_cents: number
+          input_cost_per_mtok: number
+          output_cost_per_mtok: number
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          household_id: string
+          enabled?: boolean
+          daily_calls_per_user?: number
+          monthly_cost_cap_cents?: number
+          input_cost_per_mtok?: number
+          output_cost_per_mtok?: number
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          household_id?: string
+          enabled?: boolean
+          daily_calls_per_user?: number
+          monthly_cost_cap_cents?: number
+          input_cost_per_mtok?: number
+          output_cost_per_mtok?: number
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: []
+      }
+      ai_usage: {
+        Row: {
+          id: string
+          household_id: string
+          user_id: string | null
+          created_at: string
+          model: string
+          prompt_tokens: number
+          completion_tokens: number
+          cost_cents: number
+          outcome: string
+        }
+        Insert: {
+          id?: string
+          household_id: string
+          user_id?: string | null
+          created_at?: string
+          model?: string
+          prompt_tokens?: number
+          completion_tokens?: number
+          cost_cents?: number
+          outcome?: string
+        }
+        Update: {
+          id?: string
+          household_id?: string
+          user_id?: string | null
+          created_at?: string
+          model?: string
+          prompt_tokens?: number
+          completion_tokens?: number
+          cost_cents?: number
+          outcome?: string
+        }
+        Relationships: []
+      }
       app_admins: {
         Row: {
           created_at: string
@@ -647,6 +716,17 @@ export type Database = {
     }
     Functions: {
       admin_household_overview: { Args: Record<string, never>; Returns: Json }
+      claim_ai_call: { Args: Record<string, never>; Returns: Json }
+      record_ai_call: {
+        Args: {
+          _usage_id: string
+          _model: string
+          _prompt_tokens: number
+          _completion_tokens: number
+          _outcome: string
+        }
+        Returns: undefined
+      }
       is_app_admin: { Args: Record<string, never>; Returns: boolean }
       is_household_member: { Args: { _household_id: string }; Returns: boolean }
       join_household_by_code: { Args: { _code: string }; Returns: string }

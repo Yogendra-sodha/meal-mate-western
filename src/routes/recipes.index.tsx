@@ -1,15 +1,16 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { Heart, Plus, Search, Star } from "lucide-react";
+import { Heart, Plus, Search, Sparkles, Star } from "lucide-react";
 import { useMemo, useState } from "react";
 
 import { PageHeader, Screen } from "@/components/app-shell";
 import { EditedBy } from "@/components/edited-by";
+import { PasteRecipeDialog } from "@/components/paste-recipe-dialog";
 import { RecipeEditor } from "@/components/recipe-editor";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { formatUpdatedAt } from "@/lib/planning";
 import { useStore } from "@/lib/store";
-import { CUISINES } from "@/lib/types";
+import { CUISINES, type Recipe } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/recipes/")({
@@ -37,6 +38,10 @@ function RecipeList() {
   const [cuisine, setCuisine] = useState<string | null>(null);
   const [favOnly, setFavOnly] = useState(false);
   const [creating, setCreating] = useState(false);
+  const [pasting, setPasting] = useState(false);
+  // A parsed import lands here and opens the editor, so it is reviewed and
+  // saved exactly like a recipe typed by hand.
+  const [imported, setImported] = useState<Recipe | null>(null);
 
   const list = useMemo(
     () =>
@@ -56,9 +61,20 @@ function RecipeList() {
         title="Recipes"
         subtitle={`${list.length} pure-veg dishes, no onion or garlic`}
         action={
-          <Button className="h-11 rounded-full" onClick={() => setCreating(true)}>
-            <Plus className="mr-1 h-4 w-4" /> Add
-          </Button>
+          <div className="flex gap-2">
+            <Button
+              variant="secondary"
+              size="icon"
+              className="h-11 w-11 rounded-full"
+              onClick={() => setPasting(true)}
+              aria-label="Paste a recipe"
+            >
+              <Sparkles className="h-5 w-5" />
+            </Button>
+            <Button className="h-11 rounded-full" onClick={() => setCreating(true)}>
+              <Plus className="mr-1 h-4 w-4" /> Add
+            </Button>
+          </div>
         }
       />
 
@@ -71,6 +87,26 @@ function RecipeList() {
         />
       ) : null}
 
+      <PasteRecipeDialog
+        open={pasting}
+        onOpenChange={setPasting}
+        onParsed={(r) => {
+          setPasting(false);
+          setImported(r);
+        }}
+      />
+
+      {imported ? (
+        <RecipeEditor
+          mode="create"
+          open
+          onOpenChange={(v) => {
+            if (!v) setImported(null);
+          }}
+          recipe={imported}
+          onSave={(r) => store.addRecipe(r)}
+        />
+      ) : null}
 
       <div className="relative mb-3">
         <Search className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />

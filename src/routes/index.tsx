@@ -156,13 +156,6 @@ function Dashboard() {
               <TaskGroup title="Cooking" tasks={cook} />
               <TaskGroup title="Chores" tasks={tasks.filter((t) => t.kind === "chore")} />
             </div>
-            <Button
-              variant="secondary"
-              className="mt-4 h-11 w-full rounded-full"
-              onClick={() => store.autoAssign(today)}
-            >
-              Auto-assign tasks to roommates
-            </Button>
           </section>
 
           <section className="surface-card p-4">

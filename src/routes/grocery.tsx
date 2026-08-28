@@ -24,14 +24,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  buildGroceryList,
-  formatQty,
-  shortDayLabel,
-  toISODate,
-  weekDates,
-  weekRangeLabel,
-} from "@/lib/planning";
+import { buildGroceryList, formatQty, toISODate, weekDates, weekRangeLabel } from "@/lib/planning";
 import { useStore } from "@/lib/store";
 import { type AppState, type Category, CATEGORIES } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -62,14 +55,13 @@ function Grocery() {
   const { week } = Route.useSearch();
   const store = useStore();
   const { state, recipesById } = store;
-  const [range, setRange] = useState<"today" | "week">("week");
 
   const anchor = new Date();
   anchor.setDate(anchor.getDate() + week * 7);
-  const dates = range === "today" ? [toISODate(new Date())] : weekDates(anchor).map(toISODate);
+  const dates = weekDates(anchor).map(toISODate);
 
-  // Every dish planned this week, whatever the today/week toggle shows — an
-  // item added on Monday may well be for Saturday's dish.
+  // Every dish planned this week, so an item added on Monday can still be
+  // tagged to Saturday's dish.
   const weekDishes = useMemo(() => {
     const titles = new Set<string>();
     for (const iso of weekDates(anchor).map(toISODate)) {
@@ -279,10 +271,7 @@ function Grocery() {
       return;
     }
 
-    const heading =
-      range === "today"
-        ? `Grocery list — ${shortDayLabel(dates[0]!)}`
-        : `Grocery list — ${weekRangeLabel(dates[0]!, dates[dates.length - 1]!)}`;
+    const heading = `Grocery list — ${weekRangeLabel(dates[0]!, dates[dates.length - 1]!)}`;
 
     const body = CATEGORIES.map(({ id, label }) => {
       const items = rows.filter((r) => r.category === id);
@@ -313,11 +302,7 @@ function Grocery() {
     <Screen>
       <PageHeader
         title="Grocery list"
-        subtitle={
-          range === "today"
-            ? "For tonight's dinner"
-            : weekRangeLabel(dates[0]!, dates[dates.length - 1]!)
-        }
+        subtitle={weekRangeLabel(dates[0]!, dates[dates.length - 1]!)}
         action={
           <Button
             variant="secondary"
@@ -330,24 +315,6 @@ function Grocery() {
           </Button>
         }
       />
-
-      <div className="mb-4 flex gap-2">
-        {(["today", "week"] as const).map((r) => (
-          <button
-            key={r}
-            type="button"
-            onClick={() => setRange(r)}
-            className={cn(
-              "flex-1 rounded-full px-4 py-2.5 text-sm font-bold",
-              range === r
-                ? "bg-primary text-primary-foreground"
-                : "bg-surface-2 text-muted-foreground",
-            )}
-          >
-            {r === "today" ? "Today" : "Whole week"}
-          </button>
-        ))}
-      </div>
 
       <div className="mb-4 flex items-center justify-between gap-3 rounded-2xl bg-primary-container px-4 py-3 text-primary-container-foreground">
         <p className="text-sm font-bold">

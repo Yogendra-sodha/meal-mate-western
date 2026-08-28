@@ -89,7 +89,6 @@ interface StoreValue {
   ensureTasks: (date: string) => void;
   toggleTask: (id: string) => void;
   assignTask: (id: string, assignee?: string) => void;
-  autoAssign: (date: string) => void;
   addTask: (task: Omit<Task, "id" | "done">) => void;
   removeTask: (id: string) => void;
   upsertInventory: (item: InventoryItem) => void;
@@ -776,26 +775,6 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           return d;
         });
         void patchTask(id, { assigned_to: assignee ?? null });
-      },
-      autoAssign: (date) => {
-        const people = state.people;
-        if (!people.length) return;
-        let i = Math.floor(Math.random() * people.length);
-        const assignments: { id: string; assignee: string }[] = [];
-        state.tasks
-          .filter((t) => t.date === date)
-          .forEach((t) => {
-            assignments.push({ id: t.id, assignee: people[i % people.length]!.id });
-            i += 1;
-          });
-        update((d) => {
-          assignments.forEach((a) => {
-            const t = d.tasks.find((x) => x.id === a.id);
-            if (t) t.assignee = a.assignee;
-          });
-          return d;
-        });
-        void Promise.all(assignments.map((a) => patchTask(a.id, { assigned_to: a.assignee })));
       },
       addTask: (task) => {
         const created: Task = { ...task, id: `${task.date}-custom-${Date.now()}`, done: false };

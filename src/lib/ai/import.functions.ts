@@ -107,7 +107,7 @@ export const importRecipeText = createServerFn({ method: "POST" })
       finish(outcome, completion.model, completion.promptTokens, completion.completionTokens);
 
     if (!completion.text.trim()) {
-      await record("invalid_output");
+      await record(completion.finishReason === "length" ? "out_of_budget" : "empty_reply");
       console.error(
         `[ai] empty reply from ${completion.model} (finish_reason: ${completion.finishReason || "unknown"})`,
       );
@@ -118,13 +118,17 @@ export const importRecipeText = createServerFn({ method: "POST" })
     try {
       payload = JSON.parse(completion.text);
     } catch {
-      await record("invalid_output");
+      // The specific outcome is what the admin log shows, so a future failure
+      // names itself instead of being one undifferentiated "malformed".
+      await record("bad_json");
+      console.error(`[ai] unparseable reply: ${completion.text.slice(0, 400)}`);
       return { ok: false, refusal: "invalid_output" };
     }
 
     const result = parseModelOutput(payload);
     if (!result) {
-      await record("invalid_output");
+      await record("bad_shape");
+      console.error(`[ai] reply failed validation: ${JSON.stringify(payload).slice(0, 400)}`);
       return { ok: false, refusal: "invalid_output" };
     }
     if (!result.ok) {

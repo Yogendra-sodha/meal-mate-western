@@ -19,7 +19,11 @@ const cuisineNames = CUISINES as [Cuisine, ...Cuisine[]];
  */
 export const parsedIngredientSchema = z.object({
   name: z.string().min(1).max(80),
-  qty: z.number().positive().max(10000),
+  // Zero is allowed and means "no amount was given" — "salt to taste" is an
+  // ordinary line in a handwritten recipe, and the editor shows it as a blank
+  // to fill in. Requiring a positive number here threw away whole recipes over
+  // one unmeasured ingredient.
+  qty: z.number().min(0).max(10000),
   unit: z.string().max(20),
   category: z.enum(categoryIds),
 });
@@ -132,12 +136,91 @@ export function parseModelOutput(raw: unknown): AiResult | null {
   if (!envelope.success) return null;
 
   if (envelope.data.ok) {
-    const recipe = parsedRecipeSchema.safeParse(envelope.data.recipe);
+    const normalised = normaliseRecipe(envelope.data.recipe);
+    if (!normalised) return null;
+    const recipe = parsedRecipeSchema.safeParse(normalised);
     return recipe.success ? { ok: true, recipe: recipe.data } : null;
   }
   return {
     ok: false,
     reason: envelope.data.reason === "too_little_detail" ? "too_little_detail" : "not_a_recipe",
+  };
+}
+
+const text = (value: unknown, max: number) =>
+  typeof value === "string" ? value.trim().slice(0, max) : "";
+
+/** Whole minutes and plate counts. */
+const whole = (value: unknown, min: number, max: number, fallback: number) => {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return fallback;
+  return Math.min(Math.max(Math.round(n), min), max);
+};
+
+/** Amounts keep two decimals, so 2.5 kg survives. */
+const amount = (value: unknown, min: number, max: number, fallback: number) => {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return fallback;
+  return Math.min(Math.max(Math.round(n * 100) / 100, min), max);
+};
+
+const list = (value: unknown) => (Array.isArray(value) ? value : []);
+
+/**
+ * Brings a model response inside the bounds instead of rejecting it for being
+ * outside them.
+ *
+ * The bounds exist to keep unbounded data out of the database, and clamping
+ * achieves that just as well as refusing — while refusing costs the cook a
+ * whole recipe over a description four characters too long, or a category the
+ * model spelled its own way. Both would be visible and fixable in the editor;
+ * neither is worth discarding the parse for.
+ *
+ * A missing title is the one thing that cannot be salvaged, because there is
+ * no recipe without one. Everything else has a safe reading.
+ */
+function normaliseRecipe(raw: unknown): Record<string, unknown> | null {
+  if (typeof raw !== "object" || raw === null) return null;
+  const r = raw as Record<string, unknown>;
+
+  const title = text(r["title"], 120);
+  if (!title) return null;
+
+  const cuisine = CUISINES.find((c) => c === r["cuisine"]) ?? "Gujarati";
+  const steps = (value: unknown) =>
+    list(value)
+      .map((s) => text(s, 500))
+      .filter(Boolean)
+      .slice(0, 40);
+
+  return {
+    title,
+    cuisine,
+    description: text(r["description"], 400),
+    prepMin: whole(r["prepMin"], 0, 600, 0),
+    cookMin: whole(r["cookMin"], 0, 600, 0),
+    baseServings: whole(r["baseServings"], 1, 500, 20),
+    ingredients: list(r["ingredients"])
+      .map((item) => {
+        const i = (typeof item === "object" && item !== null ? item : {}) as Record<
+          string,
+          unknown
+        >;
+        return {
+          name: text(i["name"], 80),
+          qty: amount(i["qty"], 0, 10000, 0),
+          unit: text(i["unit"], 20),
+          category: categoryIds.find((c) => c === i["category"]) ?? "pantry",
+        };
+      })
+      .filter((i) => i.name)
+      .slice(0, 60),
+    prepSteps: steps(r["prepSteps"]),
+    cookSteps: steps(r["cookSteps"]),
+    tags: list(r["tags"])
+      .map((t) => text(t, 30))
+      .filter(Boolean)
+      .slice(0, 10),
   };
 }
 

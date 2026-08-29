@@ -18,6 +18,7 @@ import { BottomNav } from "../components/app-shell";
 import { AuthRedirectNotice } from "../components/auth-redirect-notice";
 import { StoreProvider } from "../lib/store";
 import { AuthProvider } from "../lib/auth";
+import { AddToHomeBanner } from "../components/add-to-home-banner";
 import { AuthGate } from "../components/auth-gate";
 import { Toaster } from "../components/ui/sonner";
 import { reportAppError } from "../lib/error-reporting";
@@ -154,6 +155,7 @@ function RootComponent() {
             <BottomNav />
           </StoreProvider>
         </AuthGate>
+        <AddToHomeBanner />
         <Toaster position="top-center" />
         <AuthRedirectNotice />
       </AuthProvider>

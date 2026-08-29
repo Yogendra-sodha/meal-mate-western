@@ -106,6 +106,14 @@ export const importRecipeText = createServerFn({ method: "POST" })
     const record = (outcome: string) =>
       finish(outcome, completion.model, completion.promptTokens, completion.completionTokens);
 
+    if (!completion.text.trim()) {
+      await record("invalid_output");
+      console.error(
+        `[ai] empty reply from ${completion.model} (finish_reason: ${completion.finishReason || "unknown"})`,
+      );
+      return { ok: false, refusal: "invalid_output" };
+    }
+
     let payload: unknown;
     try {
       payload = JSON.parse(completion.text);

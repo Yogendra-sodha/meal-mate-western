@@ -20,8 +20,8 @@ CREATE TABLE IF NOT EXISTS public.ai_settings (
   monthly_cost_cap_cents integer NOT NULL DEFAULT 200,
   -- Prices are settings, not constants: they change without warning, and a
   -- wrong number here should be fixable from the admin screen, not a deploy.
-  input_cost_per_mtok numeric NOT NULL DEFAULT 0.25,
-  output_cost_per_mtok numeric NOT NULL DEFAULT 2.00,
+  input_cost_per_mtok numeric NOT NULL DEFAULT 0.20,
+  output_cost_per_mtok numeric NOT NULL DEFAULT 1.20,
   updated_at timestamptz NOT NULL DEFAULT now(),
   updated_by uuid REFERENCES auth.users(id) ON DELETE SET NULL
 );

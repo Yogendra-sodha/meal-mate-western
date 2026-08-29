@@ -3,6 +3,8 @@ import { RECIPE_JSON_SCHEMA } from "./recipe-schema";
 export interface CompletionResult {
   /** raw JSON text from the model, still unvalidated */
   text: string;
+  /** the provider's stop reason, e.g. "stop" or "length" */
+  finishReason: string;
   model: string;
   promptTokens: number;
   completionTokens: number;
@@ -14,8 +16,14 @@ export interface LlmProvider {
   complete(system: string, user: string): Promise<CompletionResult>;
 }
 
-/** Hard ceiling on generated tokens, so a jailbreak still cannot run up a bill. */
-const MAX_OUTPUT_TOKENS = 2000;
+/**
+ * Hard ceiling on generated tokens, so a jailbreak still cannot run up a bill.
+ *
+ * Roomier than a recipe needs because on a reasoning model this budget covers
+ * thinking as well as the answer: too tight and the reply is cut off before
+ * any JSON is written, which reads as a broken feature rather than a limit.
+ */
+const MAX_OUTPUT_TOKENS = 6000;
 
 /**
  * Any provider speaking the OpenAI chat-completions API.
@@ -50,12 +58,15 @@ class OpenAiCompatibleProvider implements LlmProvider {
 
     const body = (await response.json()) as {
       model?: string;
-      choices?: { message?: { content?: string } }[];
+      choices?: { message?: { content?: string }; finish_reason?: string }[];
       usage?: { prompt_tokens?: number; completion_tokens?: number };
     };
 
     return {
       text: body.choices?.[0]?.message?.content ?? "",
+      // Carried through so an empty reply can say why — "length" means the
+      // token budget ran out, which is a different fix from a malformed one.
+      finishReason: body.choices?.[0]?.finish_reason ?? "",
       model: body.model ?? this.model,
       promptTokens: body.usage?.prompt_tokens ?? 0,
       completionTokens: body.usage?.completion_tokens ?? 0,
@@ -97,6 +108,6 @@ export function getProvider(): LlmProvider | null {
   const apiKey = process.env["AI_API_KEY"] ?? process.env["OPENAI_API_KEY"];
   if (!apiKey) return null;
   const baseUrl = process.env["AI_BASE_URL"] ?? "https://api.openai.com/v1";
-  const model = process.env["AI_MODEL"] ?? "gpt-5-mini";
+  const model = process.env["AI_MODEL"] ?? "gpt-5.6-luna";
   return new OpenAiCompatibleProvider(apiKey, baseUrl, model);
 }

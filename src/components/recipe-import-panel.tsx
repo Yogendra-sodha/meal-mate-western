@@ -82,7 +82,12 @@ export function RecipeImportPanel({
         );
         return;
       }
-      onImported(toRecipeDraft(result.recipe));
+      // Keeps the link on the recipe, so the video is one tap away from the
+      // dish it produced rather than lost with the paste.
+      onImported({
+        ...toRecipeDraft(result.recipe),
+        ...(result.videoUrl ? { videoUrl: result.videoUrl } : {}),
+      });
       setUrl("");
       setNotes("");
       setMode(null);
@@ -105,7 +110,16 @@ export function RecipeImportPanel({
     mode === "youtube" ? url.trim().length > 0 : notes.trim().length >= MIN_PASTE_LENGTH;
 
   return (
-    <section className="rounded-2xl bg-surface-2 p-3">
+    <section className="rounded-2xl border border-primary/30 bg-surface-2 p-3">
+      <p className="mb-3 flex items-start gap-2 text-sm font-semibold">
+        <Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+        <span className="min-w-0 font-normal text-muted-foreground">
+          Give it a cooking <span className="font-semibold text-foreground">YouTube link</span> or
+          your <span className="font-semibold text-foreground">own notes</span> — it reads either
+          and fills in the recipe below.
+        </span>
+      </p>
+
       <div className="grid gap-1.5">
         <Label htmlFor="ri-plates">Cooking for how many plates?</Label>
         <Select value={String(plates)} onValueChange={(v) => onPlatesChange(Number(v))}>

@@ -37,6 +37,8 @@ export type ImportResult =
       /** false when the source never said what it makes, so nothing was scaled */
       scaled: boolean;
       plates: number;
+      /** the tidied link a video came from, to keep on the saved recipe */
+      videoUrl?: string;
     }
   | { ok: false; refusal: ImportRefusal; limit?: number };
 
@@ -178,5 +180,15 @@ export const importRecipe = createServerFn({ method: "POST" })
     // Scaling is arithmetic, so it happens here rather than being asked of the
     // model: exact, free, and it cannot come back wrong.
     const { recipe, scaled } = scaleToPlates(result.recipe, plates);
-    return { ok: true, recipe, scaled, plates, remainingToday: claimed.remaining_today ?? 0 };
+    return {
+      ok: true,
+      recipe,
+      scaled,
+      plates,
+      // The canonical form, not what was typed, so the saved recipe carries a
+      // link that opens cleanly rather than one trailing a playlist and a
+      // timestamp.
+      ...(videoUrl ? { videoUrl } : {}),
+      remainingToday: claimed.remaining_today ?? 0,
+    };
   });

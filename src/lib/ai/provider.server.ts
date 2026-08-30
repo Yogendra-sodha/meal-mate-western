@@ -111,3 +111,95 @@ export function getProvider(): LlmProvider | null {
   const model = process.env["AI_MODEL"] ?? "gpt-5.6-luna";
   return new OpenAiCompatibleProvider(apiKey, baseUrl, model);
 }
+
+/** A model that can watch a video, which the chat-completions shape cannot express. */
+export interface VideoProvider {
+  model: string;
+  /** Reads the video at `youtubeUrl` and answers the system prompt about it. */
+  completeFromVideo(system: string, youtubeUrl: string): Promise<CompletionResult>;
+}
+
+/**
+ * Gemini, reached over its REST API.
+ *
+ * A separate interface from the text provider because the difference is real:
+ * this one is handed a URL it fetches and watches itself, and is billed by the
+ * video's duration rather than by the length of a prompt.
+ *
+ * No response schema is sent — only `application/json`. Gemini's schema
+ * dialect differs from OpenAI's, and a mismatch there fails the whole call,
+ * while the validation that actually protects the app runs on the reply
+ * either way.
+ */
+class GeminiVideoProvider implements VideoProvider {
+  constructor(
+    private readonly apiKey: string,
+    readonly model: string,
+  ) {}
+
+  async completeFromVideo(system: string, youtubeUrl: string): Promise<CompletionResult> {
+    // Low media resolution samples the frames coarsely, which is a third of
+    // the token cost. A cook's spoken narration is where the amounts are, and
+    // the audio track is charged the same at either setting.
+    let response = await this.post(system, youtubeUrl, true);
+    if (!response.ok) {
+      const detail = await response.clone().text();
+      // Older or differently-configured endpoints reject the field outright.
+      if (/mediaResolution|media_resolution/i.test(detail)) {
+        response = await this.post(system, youtubeUrl, false);
+      }
+    }
+
+    if (!response.ok) {
+      const detail = await response.text();
+      throw new Error(`Gemini returned ${response.status}: ${detail.slice(0, 300)}`);
+    }
+
+    const body = (await response.json()) as {
+      candidates?: { content?: { parts?: { text?: string }[] }; finishReason?: string }[];
+      usageMetadata?: { promptTokenCount?: number; candidatesTokenCount?: number };
+    };
+    const candidate = body.candidates?.[0];
+
+    return {
+      text: (candidate?.content?.parts ?? []).map((p) => p.text ?? "").join(""),
+      finishReason: candidate?.finishReason ?? "",
+      model: this.model,
+      promptTokens: body.usageMetadata?.promptTokenCount ?? 0,
+      completionTokens: body.usageMetadata?.candidatesTokenCount ?? 0,
+    };
+  }
+
+  private post(system: string, youtubeUrl: string, lowResolution: boolean) {
+    const base = process.env["GEMINI_BASE_URL"] ?? "https://generativelanguage.googleapis.com";
+    return fetch(`${base.replace(/\/$/, "")}/v1beta/models/${this.model}:generateContent`, {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-goog-api-key": this.apiKey },
+      body: JSON.stringify({
+        systemInstruction: { parts: [{ text: system }] },
+        contents: [
+          {
+            role: "user",
+            parts: [
+              { fileData: { fileUri: youtubeUrl, mimeType: "video/*" } },
+              { text: "Convert this cooking video into the JSON object described above." },
+            ],
+          },
+        ],
+        generationConfig: {
+          responseMimeType: "application/json",
+          maxOutputTokens: MAX_OUTPUT_TOKENS,
+          ...(lowResolution ? { mediaResolution: "MEDIA_RESOLUTION_LOW" } : {}),
+        },
+      }),
+    });
+  }
+}
+
+/** Builds the video provider, or null when no Gemini key is configured. */
+export function getVideoProvider(): VideoProvider | null {
+  const apiKey = process.env["GEMINI_API_KEY"];
+  if (!apiKey) return null;
+  const model = process.env["GEMINI_MODEL"] ?? "gemini-3.1-flash-lite";
+  return new GeminiVideoProvider(apiKey, model);
+}

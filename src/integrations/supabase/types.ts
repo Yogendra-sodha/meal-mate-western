@@ -22,6 +22,8 @@ export type Database = {
           monthly_cost_cap_cents: number
           input_cost_per_mtok: number
           output_cost_per_mtok: number
+          video_input_cost_per_mtok: number
+          video_output_cost_per_mtok: number
           updated_at: string
           updated_by: string | null
         }
@@ -32,6 +34,8 @@ export type Database = {
           monthly_cost_cap_cents?: number
           input_cost_per_mtok?: number
           output_cost_per_mtok?: number
+          video_input_cost_per_mtok?: number
+          video_output_cost_per_mtok?: number
           updated_at?: string
           updated_by?: string | null
         }
@@ -42,6 +46,8 @@ export type Database = {
           monthly_cost_cap_cents?: number
           input_cost_per_mtok?: number
           output_cost_per_mtok?: number
+          video_input_cost_per_mtok?: number
+          video_output_cost_per_mtok?: number
           updated_at?: string
           updated_by?: string | null
         }
@@ -58,6 +64,7 @@ export type Database = {
           completion_tokens: number
           cost_cents: number
           outcome: string
+          source: string
         }
         Insert: {
           id?: string
@@ -69,6 +76,7 @@ export type Database = {
           completion_tokens?: number
           cost_cents?: number
           outcome?: string
+          source?: string
         }
         Update: {
           id?: string
@@ -80,6 +88,7 @@ export type Database = {
           completion_tokens?: number
           cost_cents?: number
           outcome?: string
+          source?: string
         }
         Relationships: []
       }
@@ -724,6 +733,7 @@ export type Database = {
           _prompt_tokens: number
           _completion_tokens: number
           _outcome: string
+          _source?: string
         }
         Returns: undefined
       }

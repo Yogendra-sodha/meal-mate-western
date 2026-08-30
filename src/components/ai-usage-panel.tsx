@@ -15,6 +15,8 @@ interface Settings {
   monthly_cost_cap_cents: number;
   input_cost_per_mtok: number;
   output_cost_per_mtok: number;
+  video_input_cost_per_mtok: number;
+  video_output_cost_per_mtok: number;
 }
 
 interface UsageRow {
@@ -26,6 +28,7 @@ interface UsageRow {
   completion_tokens: number;
   cost_cents: number;
   outcome: string;
+  source: string;
 }
 
 const money = (cents: number) =>
@@ -55,14 +58,14 @@ export function AiUsagePanel() {
       supabase
         .from("ai_settings")
         .select(
-          "household_id, enabled, daily_calls_per_user, monthly_cost_cap_cents, input_cost_per_mtok, output_cost_per_mtok",
+          "household_id, enabled, daily_calls_per_user, monthly_cost_cap_cents, input_cost_per_mtok, output_cost_per_mtok, video_input_cost_per_mtok, video_output_cost_per_mtok",
         )
         .limit(1)
         .maybeSingle(),
       supabase
         .from("ai_usage")
         .select(
-          "id, user_id, created_at, model, prompt_tokens, completion_tokens, cost_cents, outcome",
+          "id, user_id, created_at, model, prompt_tokens, completion_tokens, cost_cents, outcome, source",
         )
         .gte("created_at", startOfMonthIso())
         .order("created_at", { ascending: false })
@@ -161,22 +164,37 @@ export function AiUsagePanel() {
           />
           <NumberField
             id="ai-in"
-            label="Input price per 1M tokens ($)"
+            label="Notes: input per 1M ($)"
             value={settings.input_cost_per_mtok}
             step="0.01"
             onCommit={(v) => void patch({ input_cost_per_mtok: v })}
           />
           <NumberField
             id="ai-out"
-            label="Output price per 1M tokens ($)"
+            label="Notes: output per 1M ($)"
             value={settings.output_cost_per_mtok}
             step="0.01"
             onCommit={(v) => void patch({ output_cost_per_mtok: v })}
           />
+          <NumberField
+            id="ai-vin"
+            label="Video: input per 1M ($)"
+            value={settings.video_input_cost_per_mtok}
+            step="0.01"
+            onCommit={(v) => void patch({ video_input_cost_per_mtok: v })}
+          />
+          <NumberField
+            id="ai-vout"
+            label="Video: output per 1M ($)"
+            value={settings.video_output_cost_per_mtok}
+            step="0.01"
+            onCommit={(v) => void patch({ video_output_cost_per_mtok: v })}
+          />
         </div>
         <p className="mt-2 text-xs text-muted-foreground">
-          Prices are only used to work out the running total. Correct them here if the provider
-          changes them — no deploy needed.
+          Notes and video go to different models at different rates, so each is priced separately.
+          These only work out the running total — correct them here if a provider changes its
+          prices, no deploy needed.
         </p>
       </section>
 
@@ -198,7 +216,8 @@ export function AiUsagePanel() {
               >
                 <span className="min-w-0">
                   <span className="block truncate text-sm font-semibold">
-                    {names[r.user_id ?? ""] ?? "Someone"} • {r.outcome}
+                    {names[r.user_id ?? ""] ?? "Someone"} • {r.source === "video" ? "🎬" : "📝"}{" "}
+                    {r.outcome}
                   </span>
                   <span className="block text-xs text-muted-foreground">
                     {new Date(r.created_at).toLocaleString()} • {r.prompt_tokens}+

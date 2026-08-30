@@ -2,6 +2,7 @@ import { Plus, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 
+import { RecipeImportPanel } from "@/components/recipe-import-panel";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -92,6 +93,14 @@ export function RecipeEditor({
         </DialogHeader>
 
         <div className="space-y-4">
+          {mode === "create" ? (
+            <RecipeImportPanel
+              plates={draft.baseServings}
+              onPlatesChange={(n) => set("baseServings", n)}
+              onImported={(imported) => setDraft(imported)}
+            />
+          ) : null}
+
           <div className="grid gap-1.5">
             <Label htmlFor="re-title">Dish name</Label>
             <Input

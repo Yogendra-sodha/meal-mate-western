@@ -35,6 +35,9 @@ export const parsedRecipeSchema = z.object({
   prepMin: z.number().int().min(0).max(600),
   cookMin: z.number().int().min(0).max(600),
   baseServings: z.number().int().min(1).max(500),
+  // Whether the source actually said how many it makes. False means
+  // baseServings is a default, and scaling from it would multiply a guess.
+  servingsStated: z.boolean(),
   ingredients: z.array(parsedIngredientSchema).max(60),
   prepSteps: z.array(z.string().min(1).max(500)).max(40),
   cookSteps: z.array(z.string().min(1).max(500)).max(40),
@@ -81,6 +84,7 @@ export const RECIPE_JSON_SCHEMA = {
         "prepMin",
         "cookMin",
         "baseServings",
+        "servingsStated",
         "ingredients",
         "prepSteps",
         "cookSteps",
@@ -93,6 +97,7 @@ export const RECIPE_JSON_SCHEMA = {
         prepMin: { type: "integer" },
         cookMin: { type: "integer" },
         baseServings: { type: "integer" },
+        servingsStated: { type: "boolean" },
         ingredients: {
           type: "array",
           items: {
@@ -200,6 +205,7 @@ function normaliseRecipe(raw: unknown): Record<string, unknown> | null {
     prepMin: whole(r["prepMin"], 0, 600, 0),
     cookMin: whole(r["cookMin"], 0, 600, 0),
     baseServings: whole(r["baseServings"], 1, 500, 20),
+    servingsStated: r["servingsStated"] === true,
     ingredients: list(r["ingredients"])
       .map((item) => {
         const i = (typeof item === "object" && item !== null ? item : {}) as Record<
@@ -252,5 +258,44 @@ export function toRecipeDraft(parsed: ParsedRecipe): Recipe {
     prepSteps: parsed.prepSteps,
     cookSteps: parsed.cookSteps,
     tags: parsed.tags,
+  };
+}
+
+/** The plate counts the importer offers: 10, 15, 20 … 200. */
+export const PLATE_OPTIONS = Array.from({ length: 39 }, (_, i) => 10 + i * 5);
+
+export const DEFAULT_PLATES = 20;
+
+/**
+ * Rewrites a parsed recipe for the number of plates the cook asked for.
+ *
+ * Deliberately arithmetic rather than a request to the model. Multiplying is
+ * something code does exactly and for free, while a model does it
+ * inconsistently and charges for the attempt.
+ *
+ * Scaling only happens when the source actually stated what it makes. When it
+ * did not, the quantities are left exactly as written and `scaled` comes back
+ * false, because multiplying by a ratio whose denominator was invented would
+ * put a wrong number on every line. The caller says so rather than quietly
+ * presenting guesses as measurements.
+ */
+export function scaleToPlates(
+  recipe: ParsedRecipe,
+  plates: number,
+): { recipe: ParsedRecipe; scaled: boolean } {
+  if (!recipe.servingsStated || recipe.baseServings <= 0 || plates <= 0) {
+    return { recipe: { ...recipe, baseServings: plates }, scaled: false };
+  }
+  const factor = plates / recipe.baseServings;
+  return {
+    recipe: {
+      ...recipe,
+      baseServings: plates,
+      ingredients: recipe.ingredients.map((i) => ({
+        ...i,
+        qty: Math.round(i.qty * factor * 100) / 100,
+      })),
+    },
+    scaled: factor !== 1,
   };
 }

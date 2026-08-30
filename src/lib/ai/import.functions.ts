@@ -3,11 +3,15 @@ import { z } from "zod";
 
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import {
+  DEFAULT_PLATES,
   MAX_PASTE_LENGTH,
   MIN_PASTE_LENGTH,
   parseModelOutput,
+  PLATE_OPTIONS,
+  scaleToPlates,
   type ParsedRecipe,
 } from "@/lib/ai/recipe-schema";
+import { canonicalYoutubeUrl } from "@/lib/ai/youtube";
 
 /** Why an import did not produce a recipe. Each maps to one message in the UI. */
 export type ImportRefusal =
@@ -18,16 +22,32 @@ export type ImportRefusal =
   | "monthly_cap"
   | "too_short"
   | "too_long"
+  | "bad_url"
+  | "video_not_configured"
   | "not_a_recipe"
   | "too_little_detail"
   | "invalid_output"
   | "provider_error";
 
 export type ImportResult =
-  | { ok: true; recipe: ParsedRecipe; remainingToday: number }
+  | {
+      ok: true;
+      recipe: ParsedRecipe;
+      remainingToday: number;
+      /** false when the source never said what it makes, so nothing was scaled */
+      scaled: boolean;
+      plates: number;
+    }
   | { ok: false; refusal: ImportRefusal; limit?: number };
 
-const inputSchema = z.object({ text: z.string() });
+const inputSchema = z.object({
+  source: z.enum(["text", "video"]),
+  /** pasted notes, for source "text" */
+  text: z.string().default(""),
+  /** a YouTube link, for source "video" */
+  url: z.string().default(""),
+  plates: z.number(),
+});
 
 /**
  * Converts pasted text into a recipe draft, metered.
@@ -40,20 +60,33 @@ const inputSchema = z.object({ text: z.string() });
  * file ships to the client bundle, and a top-level import would take the key
  * handling and prompt with it.
  */
-export const importRecipeText = createServerFn({ method: "POST" })
+export const importRecipe = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .validator((data: unknown) => inputSchema.parse(data))
   .handler(async ({ data, context }): Promise<ImportResult> => {
+    const isVideo = data.source === "video";
     const text = data.text.trim();
 
-    // Length is checked before the quota so a stray tap on an empty box does
-    // not burn one of the day's five.
-    if (text.length < MIN_PASTE_LENGTH) return { ok: false, refusal: "too_short" };
-    if (text.length > MAX_PASTE_LENGTH) return { ok: false, refusal: "too_long" };
+    // Only a plate count the app actually offers; the number is arithmetic on
+    // every quantity, so an arbitrary one is not something to accept on trust.
+    const plates = PLATE_OPTIONS.includes(data.plates) ? data.plates : DEFAULT_PLATES;
 
-    const { getProvider } = await import("@/lib/ai/provider.server");
-    const provider = getProvider();
-    if (!provider) return { ok: false, refusal: "not_configured" };
+    // The input is checked before the quota so a stray tap on an empty box, or
+    // a link that is not a video, does not burn one of the day's five.
+    let videoUrl: string | null = null;
+    if (isVideo) {
+      videoUrl = canonicalYoutubeUrl(data.url);
+      if (!videoUrl) return { ok: false, refusal: "bad_url" };
+    } else {
+      if (text.length < MIN_PASTE_LENGTH) return { ok: false, refusal: "too_short" };
+      if (text.length > MAX_PASTE_LENGTH) return { ok: false, refusal: "too_long" };
+    }
+
+    const { getProvider, getVideoProvider } = await import("@/lib/ai/provider.server");
+    const provider = isVideo ? getVideoProvider() : getProvider();
+    if (!provider) {
+      return { ok: false, refusal: isVideo ? "video_not_configured" : "not_configured" };
+    }
 
     const { supabase } = context;
     const { data: claim, error: claimError } = await supabase.rpc("claim_ai_call");
@@ -87,13 +120,18 @@ export const importRecipeText = createServerFn({ method: "POST" })
         _prompt_tokens: promptTokens,
         _completion_tokens: completionTokens,
         _outcome: outcome,
+        _source: data.source,
       });
 
-    const { SYSTEM_PROMPT, buildUserMessage } = await import("@/lib/ai/prompt.server");
+    const { SYSTEM_PROMPT, VIDEO_SYSTEM_PROMPT, buildUserMessage } =
+      await import("@/lib/ai/prompt.server");
 
     let completion;
     try {
-      completion = await provider.complete(SYSTEM_PROMPT, buildUserMessage(text));
+      completion =
+        "completeFromVideo" in provider
+          ? await provider.completeFromVideo(VIDEO_SYSTEM_PROMPT, videoUrl!)
+          : await provider.complete(SYSTEM_PROMPT, buildUserMessage(text));
     } catch (error) {
       // The attempt still counts: a request that fails after reaching the
       // provider may well have been billed, and an uncounted failure is a way
@@ -137,5 +175,8 @@ export const importRecipeText = createServerFn({ method: "POST" })
     }
 
     await record("ok");
-    return { ok: true, recipe: result.recipe, remainingToday: claimed.remaining_today ?? 0 };
+    // Scaling is arithmetic, so it happens here rather than being asked of the
+    // model: exact, free, and it cannot come back wrong.
+    const { recipe, scaled } = scaleToPlates(result.recipe, plates);
+    return { ok: true, recipe, scaled, plates, remainingToday: claimed.remaining_today ?? 0 };
   });

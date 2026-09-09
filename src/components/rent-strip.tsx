@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { NoteCounterDialog } from "@/components/note-counter-dialog";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/lib/auth";
 import { money, type NoteCounts, windowLabel } from "@/lib/rent";
 
 interface Board {
@@ -44,6 +45,7 @@ interface MyDue {
  * displays are what the switch is announcing, not what decides it.
  */
 export function RentStrip() {
+  const { user } = useAuth();
   const [board, setBoard] = useState<Board | null>(null);
   const [mine, setMine] = useState<MyDue | null>(null);
   const [counting, setCounting] = useState(false);
@@ -52,18 +54,22 @@ export function RentStrip() {
     const { data } = await supabase.rpc("rent_board");
     const next = (data as Board | null) ?? null;
     setBoard(next);
-    if (!next) {
+    if (!next || !user) {
       setMine(null);
       return;
     }
-    // RLS narrows this to the caller's own row; there is no other to fetch.
+    // Filtered by user rather than left to RLS. A housemate only ever has one
+    // row to find, but the collector is an admin and can read every row in the
+    // cycle — without this the query returns all of them, maybeSingle errors,
+    // and the collector is the one person who cannot enter their own rent.
     const { data: due } = await supabase
       .from("rent_dues")
       .select("amount_due_cents, amount_paid_cents, declared_notes, declared_cents, paid")
       .eq("cycle_id", next.cycle_id)
+      .eq("user_id", user.id)
       .maybeSingle();
     setMine((due as MyDue | null) ?? null);
-  }, []);
+  }, [user]);
 
   useEffect(() => {
     void load();

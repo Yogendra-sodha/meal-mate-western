@@ -2,22 +2,13 @@ import { Check, RotateCcw, Wallet } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
+import { NoteCounterDialog } from "@/components/note-counter-dialog";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
 import {
-  countedCents,
-  DENOMINATIONS,
   defaultRentWindow,
   isWithinWindow,
   money,
@@ -41,6 +32,9 @@ interface Due {
   amount_due_cents: number;
   amount_paid_cents: number;
   notes: NoteCounts;
+  /** what they entered themselves, before it was accepted */
+  declared_notes: NoteCounts;
+  declared_cents: number;
   paid: boolean;
 }
 
@@ -82,7 +76,9 @@ export function RentAdminPanel() {
     if (cycleRow) {
       const { data: dueRows } = await supabase
         .from("rent_dues")
-        .select("id, user_id, amount_due_cents, amount_paid_cents, notes, paid")
+        .select(
+          "id, user_id, amount_due_cents, amount_paid_cents, notes, declared_notes, declared_cents, paid",
+        )
         .eq("cycle_id", cycleRow.id);
       setDues((dueRows as Due[] | null) ?? []);
     } else {
@@ -344,10 +340,37 @@ export function RentAdminPanel() {
                         <RotateCcw className="mr-1 h-4 w-4" /> Undo
                       </Button>
                     ) : (
-                      <Button className="h-10 rounded-full" onClick={() => setCounting(due)}>
-                        <Wallet className="mr-1 h-4 w-4" /> Count cash
+                      <Button
+                        variant={due.declared_cents > 0 ? "secondary" : "default"}
+                        className="h-10 rounded-full"
+                        onClick={() => setCounting(due)}
+                      >
+                        <Wallet className="mr-1 h-4 w-4" />
+                        {due.declared_cents > 0 ? "Check" : "Count cash"}
                       </Button>
                     )}
+                  </div>
+                ) : null}
+
+                {isIn && due && !due.paid && due.declared_cents > 0 ? (
+                  <div className="mt-2 flex items-center justify-between gap-3 rounded-xl bg-surface-2 px-3 py-2">
+                    <p className="min-w-0 text-xs">
+                      They entered <span className="font-bold">{money(due.declared_cents)}</span>
+                      {due.declared_cents !== due.amount_due_cents ? (
+                        <span className="text-destructive">
+                          {" "}
+                          · {money(Math.abs(due.declared_cents - due.amount_due_cents))}
+                          {due.declared_cents < due.amount_due_cents ? " short" : " over"}
+                        </span>
+                      ) : null}
+                    </p>
+                    <Button
+                      size="sm"
+                      className="shrink-0 rounded-full"
+                      onClick={() => void record(due, due.declared_notes, true)}
+                    >
+                      <Check className="mr-1 h-4 w-4" /> Accept
+                    </Button>
                   </div>
                 ) : null}
               </li>
@@ -357,117 +380,24 @@ export function RentAdminPanel() {
       </section>
 
       {counting ? (
-        <CountDialog
-          due={counting}
-          name={nameOf(counting.user_id)}
+        <NoteCounterDialog
+          title={`Count ${nameOf(counting.user_id)}'s rent`}
+          description={`Owes ${money(counting.amount_due_cents)}. Enter how many of each note.`}
+          dueCents={counting.amount_due_cents}
+          initialNotes={
+            Object.keys(counting.declared_notes ?? {}).length
+              ? counting.declared_notes
+              : counting.notes
+          }
+          confirmLabel="Accept"
           onClose={() => setCounting(null)}
-          onAccept={(notes) => {
+          onConfirm={(notes) => {
             void record(counting, notes, true);
             setCounting(null);
           }}
         />
       ) : null}
     </div>
-  );
-}
-
-/**
- * Counts the notes handed over, and says what that comes to.
- *
- * The total is the notes, never a typed figure, so it cannot say one thing
- * while the cash says another. A short payment is allowed — it happens — and
- * is shown as a shortfall rather than being quietly rounded up to the amount
- * due.
- */
-function CountDialog({
-  due,
-  name,
-  onClose,
-  onAccept,
-}: {
-  due: Due;
-  name: string;
-  onClose: () => void;
-  onAccept: (notes: NoteCounts) => void;
-}) {
-  const [notes, setNotes] = useState<NoteCounts>(due.notes ?? {});
-  const total = countedCents(notes);
-  const difference = total - due.amount_due_cents;
-
-  return (
-    <Dialog open onOpenChange={(v) => (v ? null : onClose())}>
-      <DialogContent className="max-h-[85vh] max-w-lg overflow-y-auto rounded-3xl">
-        <DialogHeader>
-          <DialogTitle>Count {name}&apos;s rent</DialogTitle>
-          <DialogDescription>
-            Owes {money(due.amount_due_cents)}. Enter how many of each note.
-          </DialogDescription>
-        </DialogHeader>
-
-        <div className="space-y-2">
-          {DENOMINATIONS.map((note) => {
-            const count = notes[String(note)] ?? 0;
-            return (
-              <div
-                key={note}
-                className="grid grid-cols-[4rem_minmax(0,1fr)_5rem] items-center gap-3"
-              >
-                <span className="text-sm font-bold">${note}</span>
-                <Input
-                  type="number"
-                  inputMode="numeric"
-                  min="0"
-                  step="1"
-                  value={count === 0 ? "" : count}
-                  placeholder="0"
-                  aria-label={`Number of $${note} notes`}
-                  onChange={(e) =>
-                    setNotes((n) => ({
-                      ...n,
-                      [String(note)]: Math.max(Math.floor(Number(e.target.value)) || 0, 0),
-                    }))
-                  }
-                />
-                <span className="text-right text-sm font-semibold text-muted-foreground">
-                  {count > 0 ? money(count * note * 100) : "—"}
-                </span>
-              </div>
-            );
-          })}
-        </div>
-
-        <div className="rounded-2xl bg-surface-2 p-3">
-          <div className="flex items-center justify-between">
-            <span className="text-sm font-bold">Counted</span>
-            <span className="text-lg font-bold">{money(total)}</span>
-          </div>
-          {difference !== 0 ? (
-            <p
-              className={cn(
-                "mt-1 text-xs font-semibold",
-                difference < 0 ? "text-destructive" : "text-primary",
-              )}
-            >
-              {difference < 0
-                ? `${money(-difference)} short of what is due`
-                : `${money(difference)} more than what is due`}
-            </p>
-          ) : (
-            <p className="mt-1 text-xs font-semibold text-primary">Exactly right</p>
-          )}
-        </div>
-
-        <DialogFooter>
-          <Button
-            className="h-11 w-full rounded-full"
-            disabled={total === 0}
-            onClick={() => onAccept(notes)}
-          >
-            <Check className="mr-1 h-4 w-4" /> Accept {money(total)}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
   );
 }
 

@@ -131,6 +131,9 @@ export type Database = {
           amount_due_cents: number
           notes: Json
           amount_paid_cents: number
+          declared_notes: Json
+          declared_cents: number
+          declared_at: string | null
           paid: boolean
           paid_at: string | null
           approved_by: string | null
@@ -144,6 +147,9 @@ export type Database = {
           amount_due_cents?: number
           notes?: Json
           amount_paid_cents?: number
+          declared_notes?: Json
+          declared_cents?: number
+          declared_at?: string | null
           paid?: boolean
           paid_at?: string | null
           approved_by?: string | null
@@ -157,6 +163,9 @@ export type Database = {
           amount_due_cents?: number
           notes?: Json
           amount_paid_cents?: number
+          declared_notes?: Json
+          declared_cents?: number
+          declared_at?: string | null
           paid?: boolean
           paid_at?: string | null
           approved_by?: string | null
@@ -811,6 +820,7 @@ export type Database = {
       }
       is_app_admin: { Args: Record<string, never>; Returns: boolean }
       rent_board: { Args: Record<string, never>; Returns: Json }
+      declare_rent_notes: { Args: { _notes: Json }; Returns: Json }
       record_rent_payment: {
         Args: { _due_id: string; _notes: Json; _paid: boolean }
         Returns: undefined

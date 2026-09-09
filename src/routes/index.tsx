@@ -4,6 +4,7 @@ import { useEffect, useMemo } from "react";
 
 import { PageHeader, Screen } from "@/components/app-shell";
 import { DailyVat } from "@/components/daily-vat";
+import { RentStrip } from "@/components/rent-strip";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
@@ -71,6 +72,8 @@ function Dashboard() {
         subtitle={theme.label + " • " + theme.hint}
         action={<ThemeToggle />}
       />
+
+      <RentStrip />
 
       <DailyVat />
 

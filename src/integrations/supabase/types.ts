@@ -92,6 +92,78 @@ export type Database = {
         }
         Relationships: []
       }
+      rent_cycles: {
+        Row: {
+          id: string
+          household_id: string
+          period: string
+          window_start: string
+          window_end: string
+          created_by: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          household_id: string
+          period: string
+          window_start: string
+          window_end: string
+          created_by?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          household_id?: string
+          period?: string
+          window_start?: string
+          window_end?: string
+          created_by?: string | null
+          created_at?: string
+        }
+        Relationships: []
+      }
+      rent_dues: {
+        Row: {
+          id: string
+          cycle_id: string
+          household_id: string
+          user_id: string
+          amount_due_cents: number
+          notes: Json
+          amount_paid_cents: number
+          paid: boolean
+          paid_at: string | null
+          approved_by: string | null
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          cycle_id: string
+          household_id: string
+          user_id: string
+          amount_due_cents?: number
+          notes?: Json
+          amount_paid_cents?: number
+          paid?: boolean
+          paid_at?: string | null
+          approved_by?: string | null
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          cycle_id?: string
+          household_id?: string
+          user_id?: string
+          amount_due_cents?: number
+          notes?: Json
+          amount_paid_cents?: number
+          paid?: boolean
+          paid_at?: string | null
+          approved_by?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       app_admins: {
         Row: {
           created_at: string
@@ -738,6 +810,11 @@ export type Database = {
         Returns: undefined
       }
       is_app_admin: { Args: Record<string, never>; Returns: boolean }
+      rent_board: { Args: Record<string, never>; Returns: Json }
+      record_rent_payment: {
+        Args: { _due_id: string; _notes: Json; _paid: boolean }
+        Returns: undefined
+      }
       is_household_member: { Args: { _household_id: string }; Returns: boolean }
       join_household_by_code: { Args: { _code: string }; Returns: string }
       shares_household: { Args: { _user_id: string }; Returns: boolean }

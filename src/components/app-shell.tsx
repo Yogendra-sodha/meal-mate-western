@@ -15,7 +15,12 @@ const NAV = [
 export function BottomNav() {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   return (
-    <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-card/95 pb-[env(safe-area-inset-bottom)] backdrop-blur">
+    // Opaque, and deliberately not blurred. Safari gives a fixed element with
+    // a backdrop-filter its own compositing layer and then fails to keep that
+    // layer pinned while the toolbars slide away, so the bar detaches and
+    // hangs halfway up the screen mid-scroll. A solid background needs no such
+    // layer and stays where it is put.
+    <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-card pb-[env(safe-area-inset-bottom)]">
       <ul className="mx-auto grid max-w-lg grid-cols-5">
         {NAV.map(({ to, label, icon: Icon }) => {
           const active = to === "/" ? pathname === "/" : pathname.startsWith(to);
@@ -70,5 +75,8 @@ export function PageHeader({
 }
 
 export function Screen({ children }: { children: ReactNode }) {
-  return <div className="mx-auto min-h-screen w-full max-w-lg page-pad">{children}</div>;
+  // dvh rather than vh: on iOS, 100vh is the viewport with the toolbars
+  // hidden, so the page is taller than what is actually visible and the layout
+  // shifts under the bar every time they appear.
+  return <div className="mx-auto min-h-dvh w-full max-w-lg page-pad">{children}</div>;
 }

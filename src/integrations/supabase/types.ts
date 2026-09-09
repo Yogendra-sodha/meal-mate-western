@@ -97,6 +97,7 @@ export type Database = {
           id: string
           household_id: string
           period: string
+          is_open: boolean
           window_start: string
           window_end: string
           created_by: string | null
@@ -106,6 +107,7 @@ export type Database = {
           id?: string
           household_id: string
           period: string
+          is_open?: boolean
           window_start: string
           window_end: string
           created_by?: string | null
@@ -115,6 +117,7 @@ export type Database = {
           id?: string
           household_id?: string
           period?: string
+          is_open?: boolean
           window_start?: string
           window_end?: string
           created_by?: string | null

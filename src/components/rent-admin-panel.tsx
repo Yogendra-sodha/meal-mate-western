@@ -6,11 +6,11 @@ import { NoteCounterDialog } from "@/components/note-counter-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
 import {
   defaultRentWindow,
-  isWithinWindow,
   money,
   monthLabel,
   type NoteCounts,
@@ -22,6 +22,7 @@ import { cn } from "@/lib/utils";
 interface Cycle {
   id: string;
   period: string;
+  is_open: boolean;
   window_start: string;
   window_end: string;
 }
@@ -37,13 +38,6 @@ interface Due {
   declared_cents: number;
   paid: boolean;
 }
-
-const todayIso = () => {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(
-    d.getDate(),
-  ).padStart(2, "0")}`;
-};
 
 /**
  * Rent collection, for the person actually collecting it.
@@ -68,7 +62,7 @@ export function RentAdminPanel() {
     setLoading(true);
     const { data: cycleRow } = await supabase
       .from("rent_cycles")
-      .select("id, period, window_start, window_end")
+      .select("id, period, is_open, window_start, window_end")
       .eq("household_id", household.id)
       .eq("period", period)
       .maybeSingle();
@@ -109,7 +103,11 @@ export function RentAdminPanel() {
     toast.success(`${monthLabel(period)} opened`);
   };
 
-  const setWindow = async (patch: { window_start?: string; window_end?: string }) => {
+  const setWindow = async (patch: {
+    window_start?: string;
+    window_end?: string;
+    is_open?: boolean;
+  }) => {
     if (!cycle) return;
     const next = { ...cycle, ...patch };
     if (next.window_end < next.window_start) {
@@ -203,8 +201,8 @@ export function RentAdminPanel() {
       <section className="surface-card p-4">
         <h3 className="font-bold">{monthLabel(period)}</h3>
         <p className="mt-1 text-sm text-muted-foreground">
-          Not opened yet. The collection week would be {windowLabel(suggested.start, suggested.end)}{" "}
-          — you can change it after opening.
+          Not set up yet. Creating it starts with {windowLabel(suggested.start, suggested.end)} as
+          the dates, which you can change — and collection stays closed until you switch it on.
         </p>
         <div className="mt-3 flex gap-2">
           <Button className="h-11 flex-1 rounded-full" onClick={() => void openCycle()}>
@@ -222,7 +220,6 @@ export function RentAdminPanel() {
     );
   }
 
-  const open = isWithinWindow(todayIso(), cycle.window_start, cycle.window_end);
   const included = new Set(dues.map((d) => d.user_id));
 
   return (
@@ -232,7 +229,6 @@ export function RentAdminPanel() {
           <div>
             <h3 className="font-bold">{monthLabel(cycle.period)}</h3>
             <p className="text-xs text-muted-foreground">
-              {open ? "Collecting now" : "Window closed"} ·{" "}
               {windowLabel(cycle.window_start, cycle.window_end)}
             </p>
           </div>
@@ -256,6 +252,31 @@ export function RentAdminPanel() {
           </div>
         </div>
 
+        <div
+          className={cn(
+            "mt-3 flex items-center justify-between gap-3 rounded-2xl px-3 py-2.5",
+            cycle.is_open
+              ? "bg-primary-container text-primary-container-foreground"
+              : "bg-surface-2",
+          )}
+        >
+          <div className="min-w-0">
+            <p className="text-sm font-bold">
+              {cycle.is_open ? "Collection is open" : "Collection is closed"}
+            </p>
+            <p className="text-xs opacity-80">
+              {cycle.is_open
+                ? "Everyone can enter what they are handing over"
+                : "Nobody can enter anything until you switch this on"}
+            </p>
+          </div>
+          <Switch
+            checked={cycle.is_open}
+            onCheckedChange={(v) => void setWindow({ is_open: v })}
+            aria-label="Open rent collection"
+          />
+        </div>
+
         <div className="mt-3 grid grid-cols-2 gap-2">
           <div className="grid gap-1.5">
             <Label htmlFor="rent-from">Window opens</Label>
@@ -276,6 +297,10 @@ export function RentAdminPanel() {
             />
           </div>
         </div>
+        <p className="mt-2 text-xs text-muted-foreground">
+          These dates are what the house is told. Nothing opens or closes on its own — the switch
+          above is the only thing that does.
+        </p>
       </section>
 
       <section className="surface-card p-4">

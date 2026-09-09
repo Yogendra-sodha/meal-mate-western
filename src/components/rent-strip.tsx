@@ -5,12 +5,13 @@ import { toast } from "sonner";
 import { NoteCounterDialog } from "@/components/note-counter-dialog";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
-import { isWithinWindow, money, type NoteCounts, windowLabel } from "@/lib/rent";
-import { cn } from "@/lib/utils";
+import { money, type NoteCounts, windowLabel } from "@/lib/rent";
 
 interface Board {
   cycle_id: string;
   period: string;
+  /** the collector's switch — the only thing that opens collection */
+  is_open: boolean;
   window_start: string;
   window_end: string;
   paid: number;
@@ -25,13 +26,6 @@ interface MyDue {
   paid: boolean;
 }
 
-const today = () => {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(
-    d.getDate(),
-  ).padStart(2, "0")}`;
-};
-
 /**
  * Rent, as the house sees it.
  *
@@ -44,6 +38,10 @@ const today = () => {
  *
  * Entering notes is a claim, not a payment. The tick comes when the cash is
  * actually handed over and accepted.
+ *
+ * Nothing here appears on a schedule. It shows while the collector has the
+ * window switched on, and vanishes when they switch it off — the dates it
+ * displays are what the switch is announcing, not what decides it.
  */
 export function RentStrip() {
   const [board, setBoard] = useState<Board | null>(null);
@@ -79,7 +77,9 @@ export function RentStrip() {
       toast.error(
         result?.reason === "already_accepted"
           ? "Yogi has already accepted this — ask him to change it"
-          : "Could not save that",
+          : result?.reason === "window_closed"
+            ? "Rent collection is closed right now"
+            : "Could not save that",
       );
       return;
     }
@@ -87,32 +87,16 @@ export function RentStrip() {
     toast.success(`Noted ${money(result.declared_cents ?? 0)} — hand it to Yogi to be accepted`);
   };
 
-  if (!board || board.total === 0) return null;
-
-  const now = today();
-  const open = isWithinWindow(now, board.window_start, board.window_end);
-  const overdue = now > board.window_end;
-  const settled = board.paid >= board.total;
-
-  // Nothing to act on, and nothing of one's own outstanding: stay out of the way.
-  if (!open && !overdue && !(mine && !mine.paid)) return null;
-  if (settled && !mine) return null;
+  // The switch is the whole gate: closed means there is nothing to show.
+  if (!board || !board.is_open || board.total === 0) return null;
 
   return (
     <section className="mb-4 overflow-hidden rounded-2xl">
-      <div
-        className={cn(
-          "flex items-center gap-3 px-4 py-3",
-          overdue
-            ? "bg-surface-2 text-foreground"
-            : "bg-primary-container text-primary-container-foreground",
-        )}
-      >
+      <div className="flex items-center gap-3 bg-primary-container px-4 py-3 text-primary-container-foreground">
         <BanknoteArrowUp className="h-5 w-5 shrink-0" />
         <div className="min-w-0">
           <p className="text-sm font-bold">
-            {overdue ? "Rent is overdue" : "Rent week is open"} ·{" "}
-            {windowLabel(board.window_start, board.window_end)}
+            Rent collection is open · {windowLabel(board.window_start, board.window_end)}
           </p>
           <p className="text-xs opacity-80">
             {board.paid} of {board.total} paid

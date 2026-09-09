@@ -172,13 +172,20 @@ export function RentAdminPanel() {
   };
 
   const record = async (due: Due, notes: NoteCounts, paid: boolean) => {
-    const { error } = await supabase.rpc("record_rent_payment", {
+    const { data, error } = await supabase.rpc("record_rent_payment", {
       _due_id: due.id,
       _notes: notes,
       _paid: paid,
     });
-    if (error) {
-      toast.error("Could not save that");
+    const result = data as { ok: boolean; reason?: string; short_cents?: number } | null;
+    if (error || !result?.ok) {
+      // The database refuses a short acceptance outright, so say by how much
+      // rather than leaving it looking like a glitch.
+      toast.error(
+        result?.reason === "short"
+          ? `${money(result.short_cents ?? 0)} short — the full rent has to be handed over`
+          : "Could not save that",
+      );
       return;
     }
     await load();
@@ -392,6 +399,7 @@ export function RentAdminPanel() {
                     <Button
                       size="sm"
                       className="shrink-0 rounded-full"
+                      disabled={due.declared_cents < due.amount_due_cents}
                       onClick={() => void record(due, due.declared_notes, true)}
                     >
                       <Check className="mr-1 h-4 w-4" /> Accept
@@ -409,6 +417,7 @@ export function RentAdminPanel() {
           title={`Count ${nameOf(counting.user_id)}'s rent`}
           description={`Owes ${money(counting.amount_due_cents)}. Enter how many of each note.`}
           dueCents={counting.amount_due_cents}
+          requireCents={counting.amount_due_cents}
           initialNotes={
             Object.keys(counting.declared_notes ?? {}).length
               ? counting.declared_notes

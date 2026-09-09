@@ -26,6 +26,7 @@ export function NoteCounterDialog({
   title,
   description,
   dueCents,
+  requireCents,
   initialNotes,
   confirmLabel = "Save",
   onClose,
@@ -35,6 +36,8 @@ export function NoteCounterDialog({
   description: string;
   /** what is owed, so a shortfall can be shown; omit to hide the comparison */
   dueCents?: number | undefined;
+  /** when set, the total must reach this before the action is allowed */
+  requireCents?: number | undefined;
   initialNotes?: NoteCounts | undefined;
   confirmLabel?: string;
   onClose: () => void;
@@ -43,6 +46,7 @@ export function NoteCounterDialog({
   const [notes, setNotes] = useState<NoteCounts>(initialNotes ?? {});
   const total = countedCents(notes);
   const difference = dueCents === undefined ? 0 : total - dueCents;
+  const short = requireCents !== undefined && total < requireCents;
 
   return (
     <Dialog open onOpenChange={(v) => (v ? null : onClose())}>
@@ -105,14 +109,19 @@ export function NoteCounterDialog({
           )}
         </div>
 
-        <DialogFooter>
+        <DialogFooter className="flex-col gap-1.5 sm:flex-col">
           <Button
             className="h-11 w-full rounded-full"
-            disabled={total === 0}
+            disabled={total === 0 || short}
             onClick={() => onConfirm(notes)}
           >
             <Check className="mr-1 h-4 w-4" /> {confirmLabel} {money(total)}
           </Button>
+          {short ? (
+            <p className="w-full text-center text-xs font-semibold text-destructive">
+              The full rent has to be handed over before it can be accepted.
+            </p>
+          ) : null}
         </DialogFooter>
       </DialogContent>
     </Dialog>

@@ -121,9 +121,17 @@ export function RentStrip() {
               <p className="min-w-0 text-sm">
                 <span className="font-bold">You owe {money(mine.amount_due_cents)}</span>
                 {mine.declared_cents > 0 ? (
-                  <span className="block text-xs text-muted-foreground">
-                    You entered {money(mine.declared_cents)} — waiting to be accepted
-                  </span>
+                  mine.declared_cents < mine.amount_due_cents ? (
+                    <span className="block text-xs font-semibold text-destructive">
+                      You entered {money(mine.declared_cents)} —{" "}
+                      {money(mine.amount_due_cents - mine.declared_cents)} short, so it cannot be
+                      accepted yet
+                    </span>
+                  ) : (
+                    <span className="block text-xs text-muted-foreground">
+                      You entered {money(mine.declared_cents)} — waiting to be accepted
+                    </span>
+                  )
                 ) : (
                   <span className="block text-xs text-muted-foreground">
                     Enter the notes you are handing over

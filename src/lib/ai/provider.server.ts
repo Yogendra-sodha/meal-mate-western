@@ -52,8 +52,11 @@ class OpenAiCompatibleProvider implements LlmProvider {
     }
 
     if (!response.ok) {
-      const detail = await response.text();
-      throw new Error(`Model provider returned ${response.status}: ${detail.slice(0, 300)}`);
+      const body = await response.text();
+      throw Object.assign(new Error(`Model provider returned ${response.status}`), {
+        status: response.status,
+        detail: readProviderMessage(body),
+      });
     }
 
     const body = (await response.json()) as {
@@ -151,8 +154,14 @@ class GeminiVideoProvider implements VideoProvider {
     }
 
     if (!response.ok) {
-      const detail = await response.text();
-      throw new Error(`Gemini returned ${response.status}: ${detail.slice(0, 300)}`);
+      const body = await response.text();
+      // The status and the provider's own words are carried on the error so the
+      // failure can name itself instead of arriving as "could not reach the
+      // model", which says nothing and sends whoever is debugging to the logs.
+      throw Object.assign(new Error(`Gemini returned ${response.status}`), {
+        status: response.status,
+        detail: readProviderMessage(body),
+      });
     }
 
     const body = (await response.json()) as {
@@ -181,7 +190,9 @@ class GeminiVideoProvider implements VideoProvider {
           {
             role: "user",
             parts: [
-              { fileData: { fileUri: youtubeUrl, mimeType: "video/*" } },
+              // No mimeType: a YouTube link is given as the uri alone, and a
+              // wildcard like "video/*" is not a mime type the API accepts.
+              { fileData: { fileUri: youtubeUrl } },
               { text: "Convert this cooking video into the JSON object described above." },
             ],
           },
@@ -202,4 +213,19 @@ export function getVideoProvider(): VideoProvider | null {
   if (!apiKey) return null;
   const model = process.env["GEMINI_MODEL"] ?? "gemini-3.1-flash-lite";
   return new GeminiVideoProvider(apiKey, model);
+}
+
+/**
+ * Digs the human-readable part out of a provider's error body.
+ *
+ * Both providers wrap the useful sentence — "model not found", "API key not
+ * valid" — inside an envelope, and the raw JSON is no use in a toast.
+ */
+function readProviderMessage(body: string): string {
+  try {
+    const parsed = JSON.parse(body) as { error?: { message?: string; status?: string } };
+    return parsed.error?.message ?? parsed.error?.status ?? body.slice(0, 200);
+  } catch {
+    return body.slice(0, 200);
+  }
 }

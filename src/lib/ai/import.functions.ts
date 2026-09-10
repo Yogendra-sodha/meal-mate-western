@@ -40,7 +40,13 @@ export type ImportResult =
       /** the tidied link a video came from, to keep on the saved recipe */
       videoUrl?: string;
     }
-  | { ok: false; refusal: ImportRefusal; limit?: number };
+  | {
+      ok: false;
+      refusal: ImportRefusal;
+      limit?: number;
+      /** the provider's own words, when it was the provider that refused */
+      detail?: string;
+    };
 
 const inputSchema = z.object({
   source: z.enum(["text", "video"]),
@@ -138,9 +144,17 @@ export const importRecipe = createServerFn({ method: "POST" })
       // The attempt still counts: a request that fails after reaching the
       // provider may well have been billed, and an uncounted failure is a way
       // to make unlimited calls.
-      await finish("provider_error", provider.model, 0, 0);
+      const { status, detail } = error as { status?: number; detail?: string };
+      // The status goes into the outcome so the admin log distinguishes a wrong
+      // model id from a bad key from an outage, instead of one flat
+      // "provider_error" for all three.
+      await finish(status ? `provider_${status}` : "provider_error", provider.model, 0, 0);
       console.error("[ai] provider call failed:", error);
-      return { ok: false, refusal: "provider_error" };
+      return {
+        ok: false,
+        refusal: "provider_error",
+        ...(detail ? { detail } : {}),
+      };
     }
 
     const record = (outcome: string) =>

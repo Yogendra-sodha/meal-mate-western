@@ -75,10 +75,14 @@ export function RecipeImportPanel({
         data: { source: mode === "youtube" ? "video" : "text", text: notes, url, plates },
       });
       if (!result.ok) {
+        // A provider's own words beat a generic apology: "model not found" or
+        // "API key not valid" is something you can act on.
         toast.error(
           result.refusal === "daily_limit" && result.limit
             ? `You have used today's ${result.limit} imports. Try again tomorrow.`
-            : REFUSAL_MESSAGE[result.refusal],
+            : result.detail
+              ? `${REFUSAL_MESSAGE[result.refusal]} (${result.detail})`
+              : REFUSAL_MESSAGE[result.refusal],
         );
         return;
       }

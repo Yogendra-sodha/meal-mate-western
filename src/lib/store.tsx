@@ -724,10 +724,15 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           total: details?.total ?? null,
           created_by: uid,
         });
-        // The shop is done, so the list starts over: ticks, removals and pinned
-        // amounts all belonged to this trip, as did the hand-added items.
+        // Ticks, removals and pinned amounts belonged to this trip, so they go.
+        // The dismissals have already been carried into the trip as skipped
+        // names, which is what keeps those lines off the week.
         await supabase.from("grocery_checks").delete().eq("household_id", hid);
-        await supabase.from("grocery_items").delete().eq("household_id", hid);
+        // Only the hand-added items that were actually bought. Clearing all of
+        // them made sense when finishing meant every last item was ticked;
+        // now that part of a shop can be saved, an unticked one has not been
+        // bought and has to stay on the list rather than disappear.
+        await supabase.from("grocery_items").delete().eq("household_id", hid).eq("purchased", true);
         await load();
       },
       undoShopping: async (tripId) => {

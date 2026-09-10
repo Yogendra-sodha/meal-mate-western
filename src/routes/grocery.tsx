@@ -235,8 +235,12 @@ function Grocery() {
 
   const finishShopping = async () => {
     setFinishing(true);
+    // Only what was actually ticked. Anything left unticked was not bought, so
+    // it stays on the list rather than being filed away as purchased — which
+    // is what let a part-finished shop archive the whole list.
+    const picked = rows.filter((r) => r.done);
     await store.finishShopping(
-      rows.map((r) => ({ name: r.name, qty: r.qty, unit: r.unit, category: r.category })),
+      picked.map((r) => ({ name: r.name, qty: r.qty, unit: r.unit, category: r.category })),
       weekStart,
       // Lines removed from this week's list: not bought, but not wanted back.
       lines.filter((l) => state.dismissed[l.key]).map((l) => l.name),
@@ -249,7 +253,12 @@ function Grocery() {
     setFinishOpen(false);
     setStore("");
     setTotal("");
-    toast.success("Shop saved — the list is ready for next time");
+    const left = rows.length - picked.length;
+    toast.success(
+      left > 0
+        ? `Shop saved — ${picked.length} bought, ${left} still on the list`
+        : "Shop saved — the list is ready for next time",
+    );
   };
 
   const saveAmount = (row: Row, qty: number, unit: string) => {
@@ -316,18 +325,30 @@ function Grocery() {
         }
       />
 
-      <div className="mb-4 flex items-center justify-between gap-3 rounded-2xl bg-primary-container px-4 py-3 text-primary-container-foreground">
-        <p className="text-sm font-bold">
-          {bought}/{rows.length} items picked up
-        </p>
-        <Button
-          variant="ghost"
-          size="sm"
-          className="rounded-full"
-          onClick={() => store.clearPurchased()}
-        >
-          <RotateCcw className="mr-1 h-4 w-4" /> Reset
-        </Button>
+      <div className="mb-4 rounded-2xl bg-primary-container px-4 py-3 text-primary-container-foreground">
+        <div className="flex items-center justify-between gap-3">
+          <p className="text-sm font-bold">
+            {bought}/{rows.length} items picked up
+          </p>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="rounded-full"
+            onClick={() => store.clearPurchased()}
+          >
+            <RotateCcw className="mr-1 h-4 w-4" /> Reset
+          </Button>
+        </div>
+        {bought > 0 ? (
+          <Button
+            className="mt-2.5 h-10 w-full rounded-full"
+            onClick={() => setFinishOpen(true)}
+            disabled={finishing}
+          >
+            <Check className="mr-1 h-4 w-4" />
+            Done shopping ({bought} {bought === 1 ? "item" : "items"})
+          </Button>
+        ) : null}
       </div>
 
       {shoppedTrip ? (
@@ -480,9 +501,11 @@ function Grocery() {
           </DialogHeader>
           <div className="space-y-4 pt-2">
             <p className="text-sm text-muted-foreground">
-              All {rows.length} items are ticked off. Saving files them under past shops and takes
-              them off this week's list. Anything added to the plan afterwards still shows up, and
-              next week starts clean.
+              {bought === rows.length
+                ? `All ${rows.length} items are ticked off.`
+                : `${bought} of ${rows.length} ticked off — the other ${rows.length - bought} stay on the list for next time.`}{" "}
+              Saving files the ticked ones under past shops and takes them off this week's list.
+              Anything added to the plan afterwards still shows up.
             </p>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">

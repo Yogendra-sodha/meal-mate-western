@@ -15,6 +15,7 @@ import {
   monthLabel,
   type NoteCounts,
   periodOf,
+  tallyNotes,
   windowLabel,
 } from "@/lib/rent";
 import { cn } from "@/lib/utils";
@@ -199,6 +200,13 @@ export function RentAdminPanel() {
     const collected = dues.reduce((n, d) => n + (d.paid ? d.amount_paid_cents : 0), 0);
     return { due, collected, paid: dues.filter((d) => d.paid).length };
   }, [dues]);
+
+  // Only accepted payments. The tally is meant to match the cash actually in
+  // hand, and what someone has merely said they will hand over is not in it.
+  const tally = useMemo(
+    () => tallyNotes(dues.filter((d) => d.paid).map((d) => d.notes ?? {})),
+    [dues],
+  );
 
   if (loading) return <p className="text-sm text-muted-foreground">Loading rent…</p>;
 
@@ -411,6 +419,41 @@ export function RentAdminPanel() {
           })}
         </ul>
       </section>
+
+      {tally.some((row) => row.count > 0) ? (
+        <section className="surface-card overflow-hidden">
+          <h3 className="bg-surface-2 px-4 py-2.5 text-sm font-bold">Notes collected</h3>
+          <ul>
+            {tally.map((row) => (
+              <li
+                key={row.note}
+                className="grid grid-cols-[4rem_minmax(0,1fr)_6rem] items-center gap-3 border-b border-border px-4 py-2.5 last:border-0"
+              >
+                <span className="text-sm font-bold">${row.note}</span>
+                <span className={cn("text-sm", row.count === 0 && "text-muted-foreground")}>
+                  {row.count === 0 ? "none" : `× ${row.count}`}
+                </span>
+                <span
+                  className={cn(
+                    "text-right text-sm font-semibold",
+                    row.count === 0 ? "text-muted-foreground" : "text-primary",
+                  )}
+                >
+                  {row.count === 0 ? "—" : money(row.cents)}
+                </span>
+              </li>
+            ))}
+          </ul>
+          <div className="flex items-center justify-between gap-3 bg-surface-2 px-4 py-2.5">
+            <span className="text-sm font-bold">
+              {tally.reduce((n, row) => n + row.count, 0)} notes in hand
+            </span>
+            <span className="text-sm font-bold">
+              {money(tally.reduce((n, row) => n + row.cents, 0))}
+            </span>
+          </div>
+        </section>
+      ) : null}
 
       {counting ? (
         <NoteCounterDialog

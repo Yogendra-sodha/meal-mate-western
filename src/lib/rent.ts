@@ -67,3 +67,18 @@ export const money = (cents: number) =>
     currency: "USD",
     maximumFractionDigits: 2,
   });
+
+/**
+ * Adds up several piles of notes into one.
+ *
+ * What the collector ends up holding is not a total in dollars but a stack of
+ * each kind, and that is what gets checked against the cash box or handed to a
+ * bank. Every denomination is returned, zeroes included, so the tally reads in
+ * the same order every month rather than changing shape with what came in.
+ */
+export function tallyNotes(piles: NoteCounts[]): { note: number; count: number; cents: number }[] {
+  return DENOMINATIONS.map((note) => {
+    const count = piles.reduce((n, pile) => n + Math.max(pile[String(note)] ?? 0, 0), 0);
+    return { note, count, cents: count * note * 100 };
+  });
+}

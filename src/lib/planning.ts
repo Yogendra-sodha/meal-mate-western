@@ -45,7 +45,11 @@ export function parseISODate(s: string) {
 }
 
 /** 0 = Sunday, so a planned week runs Sunday through Saturday. */
-export const WEEK_STARTS_ON = 0;
+/**
+ * Saturday. The week is planned on a Saturday for the week ahead, so that is
+ * where it starts — a Sunday-based week would split every menu across two.
+ */
+export const WEEK_STARTS_ON = 6;
 
 export function startOfWeek(d: Date, weekStartsOn = WEEK_STARTS_ON) {
   const copy = new Date(d);

@@ -1,9 +1,10 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { ChevronLeft, ChevronRight, Plus, Search, Sparkles, Trash2, Users } from "lucide-react";
 import { useMemo, useState } from "react";
 
 import { PageHeader, Screen } from "@/components/app-shell";
 import { EditedBy } from "@/components/edited-by";
+import { TapToOpen } from "@/components/tap-to-open";
 import { RecipeEditor } from "@/components/recipe-editor";
 import { Button } from "@/components/ui/button";
 import {
@@ -50,6 +51,7 @@ export const Route = createFileRoute("/planner")({
 
 function Planner() {
   const store = useStore();
+  const navigate = useNavigate();
   const { state, recipes, recipesById } = store;
   const [offset, setOffset] = useState(0);
   const anchor = new Date();
@@ -106,23 +108,56 @@ function Planner() {
         {dates.map((iso) => {
           const day = state.plan[iso];
           const theme = WEEKDAY_THEMES[parseISODate(iso).getDay()] ?? WEEKDAY_THEMES[0]!;
-          const isToday = iso === toISODate(new Date());
+          const today = toISODate(new Date());
+          const isToday = iso === today;
+          // Planning Saturday's menu on Saturday makes it easy to type into
+          // yesterday by mistake, so a day that has gone says so.
+          const isPast = iso < today;
           return (
             <li
               key={iso}
-              className={cn("surface-card p-4", isToday && "ring-2 ring-primary")}
+              className={cn(
+                "surface-card p-4",
+                isToday && "ring-2 ring-primary",
+                isPast && "opacity-60",
+              )}
             >
               <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3">
                 <div className="min-w-0">
-                  <p className="text-xs font-bold uppercase tracking-wide text-primary">
+                  <p
+                    className={cn(
+                      "text-xs font-bold uppercase tracking-wide",
+                      isPast ? "text-muted-foreground line-through" : "text-primary",
+                    )}
+                  >
                     {shortDayLabel(iso)} • {theme.label}
                   </p>
                   {day ? (
                     <>
                       <p className="mt-1 font-bold leading-tight">
-                        {day.recipeIds
-                          .map((id) => recipesById[id]?.title ?? "Unknown")
-                          .join(" + ")}
+                        {day.recipeIds.map((id, i) => {
+                          const recipe = recipesById[id];
+                          return (
+                            <span key={id}>
+                              {i > 0 ? " + " : ""}
+                              {recipe ? (
+                                <TapToOpen
+                                  label={`Open ${recipe.title}`}
+                                  onTap={() =>
+                                    void navigate({
+                                      to: "/recipes/$recipeId",
+                                      params: { recipeId: recipe.id },
+                                    })
+                                  }
+                                >
+                                  {recipe.title}
+                                </TapToOpen>
+                              ) : (
+                                "Unknown"
+                              )}
+                            </span>
+                          );
+                        })}
                       </p>
                       <p className="mt-1 inline-flex items-center gap-1 text-xs text-muted-foreground">
                         <Users className="h-3.5 w-3.5" /> {day.servings} plates

@@ -89,7 +89,7 @@ function Dashboard() {
               size="lg"
               className="h-12 rounded-full text-base"
               onClick={() =>
-                store.setDay(today, [suggestForDate(today, [], state.favorites)])
+                store.setDay(today, [suggestForDate(today, [], state.favorites, store.recipes)])
               }
             >
               Suggest tonight's dinner
@@ -129,7 +129,7 @@ function Dashboard() {
                 className="rounded-full"
                 onClick={() =>
                   store.setDay(today, [
-                    suggestForDate(today, day.recipeIds, state.favorites),
+                    suggestForDate(today, day.recipeIds, state.favorites, store.recipes),
                   ])
                 }
               >

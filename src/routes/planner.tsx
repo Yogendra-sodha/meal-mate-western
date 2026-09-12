@@ -60,7 +60,7 @@ function Planner() {
   const [moveFrom, setMoveFrom] = useState<string | null>(null);
 
   const generate = () => {
-    const generated = generateWeek(dates, state);
+    const generated = generateWeek(dates, state, recipes);
     Object.entries(generated).forEach(([iso, ids]) => store.setDay(iso, ids));
   };
 
@@ -192,7 +192,11 @@ function Planner() {
                   variant="secondary"
                   size="sm"
                   className="rounded-full"
-                  onClick={() => store.setDay(iso, [suggestForDate(iso, day?.recipeIds ?? [], state.favorites)])}
+                  onClick={() =>
+                    store.setDay(iso, [
+                      suggestForDate(iso, day?.recipeIds ?? [], state.favorites, recipes),
+                    ])
+                  }
                 >
                   Suggest
                 </Button>

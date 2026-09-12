@@ -36,18 +36,33 @@ function RecipeList() {
   const [q, setQ] = useState("");
   const [cuisine, setCuisine] = useState<string | null>(null);
   const [favOnly, setFavOnly] = useState(false);
+  // Deleted recipes are kept, not destroyed, so there has to be somewhere to
+  // see them — and it must be a deliberate switch, not mixed into the list.
+  const [showDeleted, setShowDeleted] = useState(false);
   const [creating, setCreating] = useState(false);
 
   const list = useMemo(
     () =>
-      store.recipes.filter((r) => {
+      (showDeleted
+        ? store.allRecipes.filter((r) => store.state.archived.includes(r.id))
+        : store.recipes
+      ).filter((r) => {
         if (favOnly && !store.state.favorites.includes(r.id)) return false;
         if (cuisine && r.cuisine !== cuisine) return false;
         if (q && !`${r.title} ${r.description} ${r.tags.join(" ")}`.toLowerCase().includes(q.toLowerCase()))
           return false;
         return true;
       }),
-    [store.recipes, store.state.favorites, q, cuisine, favOnly],
+    [
+      store.recipes,
+      store.allRecipes,
+      store.state.archived,
+      store.state.favorites,
+      q,
+      cuisine,
+      favOnly,
+      showDeleted,
+    ],
   );
 
   return (
@@ -85,6 +100,11 @@ function RecipeList() {
         <Chip active={favOnly} onClick={() => setFavOnly((v) => !v)}>
           ♥ Favourites
         </Chip>
+        {store.state.archived.length ? (
+          <Chip active={showDeleted} onClick={() => setShowDeleted((v) => !v)}>
+            🗑 Deleted ({store.state.archived.length})
+          </Chip>
+        ) : null}
         <Chip active={!cuisine} onClick={() => setCuisine(null)}>
           All
         </Chip>
@@ -135,7 +155,7 @@ function RecipeList() {
         })}
         {!list.length ? (
           <li className="surface-card p-6 text-center text-sm text-muted-foreground">
-            No recipes match. Try a different filter.
+            {showDeleted ? "Nothing deleted." : "No recipes match. Try a different filter."}
           </li>
         ) : null}
       </ul>

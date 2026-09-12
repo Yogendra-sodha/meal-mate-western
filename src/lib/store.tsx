@@ -48,6 +48,7 @@ export const initialState: AppState = {
   dismissed: {},
   overrides: {},
   trips: [],
+  archived: [],
   customRecipes: [],
   recipeEdits: {},
   cart: [],
@@ -95,6 +96,11 @@ interface StoreValue {
   removeInventory: (id: string) => void;
   addPerson: (name: string) => void;
   removePerson: (id: string) => void;
+  /** every recipe including the archived ones, for the Deleted view */
+  allRecipes: Recipe[];
+  /** put a recipe aside: it stays readable but stops being offered */
+  archiveRecipe: (id: string) => void;
+  restoreRecipe: (id: string) => void;
   addRecipe: (recipe: Recipe) => void;
   updateRecipe: (id: string, patch: Partial<Recipe>) => void;
   resetRecipe: (id: string) => void;
@@ -186,6 +192,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       checksRes,
       logRes,
       tripsRes,
+      archiveRes,
     ] = await Promise.all([
       supabase.from("recipes").select("*").eq("household_id", householdId),
       supabase.from("recipe_ingredients").select("*"),
@@ -206,6 +213,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         .eq("household_id", householdId)
         .order("done_on", { ascending: false })
         .limit(12),
+      supabase.from("recipe_archive").select("recipe_ref").eq("household_id", householdId),
     ]);
 
     const ingByRecipe = new Map<string, Recipe["ingredients"]>();
@@ -300,6 +308,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         ...(t.total !== null && t.total !== undefined ? { total: Number(t.total) } : {}),
         items: (t.items ?? []) as ShoppingTrip["items"],
       })),
+      archived: (archiveRes.data ?? []).map((a) => a.recipe_ref),
       customRecipes,
       recipeEdits,
       cart: (groceryRes.data ?? [])
@@ -347,6 +356,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       "grocery_checks",
       "cook_log",
       "shopping_trips",
+      "recipe_archive",
     ];
     const channel = supabase.channel(`household-${householdId}`);
     for (const table of tables) {
@@ -364,7 +374,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     setState((prev) => fn(structuredClone(prev)));
   }, []);
 
-  const recipes = useMemo(
+  const allRecipes = useMemo(
     () =>
       [...RECIPES, ...state.customRecipes].map((r) => {
         const patch = state.recipeEdits[r.id];
@@ -372,9 +382,18 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       }),
     [state.customRecipes, state.recipeEdits],
   );
+
+  // What may be planned, picked or suggested. Archived ones are absent here.
+  const recipes = useMemo(
+    () => allRecipes.filter((r) => !state.archived.includes(r.id)),
+    [allRecipes, state.archived],
+  );
+
+  // Deliberately built from allRecipes: a day planned before a recipe was put
+  // aside must still show its name rather than "Unknown".
   const recipesById = useMemo(
-    () => Object.fromEntries(recipes.map((r) => [r.id, r])),
-    [recipes],
+    () => Object.fromEntries(allRecipes.map((r) => [r.id, r])),
+    [allRecipes],
   );
 
   const value = useMemo<StoreValue>(() => {
@@ -846,6 +865,38 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         send(
           supabase.from("household_members").delete().eq("household_id", hid).eq("user_id", id),
           "the removed member",
+        );
+      },
+      allRecipes,
+      archiveRecipe: (id) => {
+        update((d) => {
+          if (!d.archived.includes(id)) d.archived.push(id);
+          return d;
+        });
+        if (!hid) return;
+        send(
+          supabase
+            .from("recipe_archive")
+            .upsert(
+              { household_id: hid, recipe_ref: id, archived_by: uid },
+              { onConflict: "household_id,recipe_ref" },
+            ),
+          "the deleted recipe",
+        );
+      },
+      restoreRecipe: (id) => {
+        update((d) => {
+          d.archived = d.archived.filter((x) => x !== id);
+          return d;
+        });
+        if (!hid) return;
+        send(
+          supabase
+            .from("recipe_archive")
+            .delete()
+            .eq("household_id", hid)
+            .eq("recipe_ref", id),
+          "the restored recipe",
         );
       },
       addRecipe: (recipe) => {

@@ -102,17 +102,31 @@ export function weekRangeLabel(startIso: string, endIso: string) {
 }
 
 /** Suggest a recipe for a date, respecting the weekday theme and avoiding recent repeats. */
-export function suggestForDate(iso: string, avoid: string[], favorites: string[] = []): string {
+/**
+ * Picks a dish for a day.
+ *
+ * `choices` is the pool to choose out of, and defaults to the built-in set only
+ * so older callers keep working. Passing the household's own list is what
+ * keeps a deleted recipe from being suggested back — the archive is applied
+ * by whoever owns the list, not known about here.
+ */
+export function suggestForDate(
+  iso: string,
+  avoid: string[],
+  favorites: string[] = [],
+  choices: Recipe[] = RECIPES,
+): string {
+  const source = choices.length ? choices : RECIPES;
   const theme = WEEKDAY_THEMES[parseISODate(iso).getDay()] ?? WEEKDAY_THEMES[0]!;
-  const pool = RECIPES.filter((r) => theme.pick(r) && !avoid.includes(r.id));
-  const list = (pool.length ? pool : RECIPES.filter((r) => !avoid.includes(r.id))).slice();
-  if (!list.length) return RECIPES[0]!.id;
+  const pool = source.filter((r) => theme.pick(r) && !avoid.includes(r.id));
+  const list = (pool.length ? pool : source.filter((r) => !avoid.includes(r.id))).slice();
+  if (!list.length) return source[0]!.id;
   const favoured = list.filter((r) => favorites.includes(r.id));
   const from = favoured.length && Math.random() > 0.5 ? favoured : list;
   return from[Math.floor(Math.random() * from.length)]!.id;
 }
 
-export function generateWeek(dates: string[], state: AppState) {
+export function generateWeek(dates: string[], state: AppState, choices: Recipe[] = RECIPES) {
   const recent = Object.values(state.plan)
     .sort((a, b) => (a.date < b.date ? 1 : -1))
     .slice(0, 10)
@@ -120,7 +134,7 @@ export function generateWeek(dates: string[], state: AppState) {
   const chosen: string[] = [];
   const plan: Record<string, string[]> = {};
   for (const iso of dates) {
-    const id = suggestForDate(iso, [...recent.slice(0, 5), ...chosen], state.favorites);
+    const id = suggestForDate(iso, [...recent.slice(0, 5), ...chosen], state.favorites, choices);
     chosen.push(id);
     plan[iso] = [id];
   }

@@ -148,6 +148,8 @@ export interface AppState {
   overrides: Record<string, { qty: number; unit: string }>;
   /** most recent completed shops, newest first */
   trips: ShoppingTrip[];
+  /** recipe ids put aside: still resolvable, never offered */
+  archived: string[];
   customRecipes: Recipe[];
   /** manual edits layered over the built-in recipe library */
   recipeEdits: Record<string, Partial<Recipe>>;

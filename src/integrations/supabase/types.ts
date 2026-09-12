@@ -176,6 +176,27 @@ export type Database = {
         }
         Relationships: []
       }
+      recipe_archive: {
+        Row: {
+          household_id: string
+          recipe_ref: string
+          archived_at: string
+          archived_by: string | null
+        }
+        Insert: {
+          household_id: string
+          recipe_ref: string
+          archived_at?: string
+          archived_by?: string | null
+        }
+        Update: {
+          household_id?: string
+          recipe_ref?: string
+          archived_at?: string
+          archived_by?: string | null
+        }
+        Relationships: []
+      }
       app_admins: {
         Row: {
           created_at: string

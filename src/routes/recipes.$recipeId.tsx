@@ -6,13 +6,26 @@ import {
   Minus,
   Pencil,
   Plus,
+  RotateCcw,
   Star,
+  Trash2,
   Youtube,
 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 
 import { Screen } from "@/components/app-shell";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { RecipeEditor } from "@/components/recipe-editor";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -50,6 +63,7 @@ function RecipeDetail() {
   const { recipeId } = Route.useParams();
   const store = useStore();
   const recipe = store.recipesById[recipeId];
+  const archived = store.state.archived.includes(recipeId);
   const [servings, setServings] = useState(20);
   const [editing, setEditing] = useState(false);
 
@@ -103,6 +117,28 @@ function RecipeDetail() {
           <Heart className={cn("h-5 w-5", fav && "fill-secondary text-secondary")} />
         </Button>
       </header>
+
+      {archived ? (
+        <div className="mb-3 flex items-center justify-between gap-3 rounded-2xl bg-surface-2 px-4 py-3">
+          <p className="min-w-0 text-sm">
+            <span className="font-bold">Deleted</span>
+            <span className="block text-xs text-muted-foreground">
+              Kept here, but never suggested or offered when planning.
+            </span>
+          </p>
+          <Button
+            size="sm"
+            variant="secondary"
+            className="shrink-0 rounded-full"
+            onClick={() => {
+              store.restoreRecipe(recipe.id);
+              toast.success(`${recipe.title} is back in the list`);
+            }}
+          >
+            <RotateCcw className="mr-1 h-4 w-4" /> Restore
+          </Button>
+        </div>
+      ) : null}
 
       <h1 className="text-2xl font-bold leading-tight">{recipe.title}</h1>
       <p className="mt-1 text-sm text-muted-foreground">
@@ -287,6 +323,42 @@ function RecipeDetail() {
             <ExternalLink className="mr-2 h-4 w-4" /> Original recipe on {recipe.sourceName}
           </a>
         </Button>
+
+        {/* At the bottom and behind a confirm: destructive, and easy to hit by
+            accident anywhere nearer the top. */}
+        {archived ? null : (
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button variant="ghost" size="lg" className="h-12 rounded-full text-base">
+                <Trash2 className="mr-2 h-4 w-4" /> Delete this recipe
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent className="rounded-3xl">
+              <AlertDialogHeader>
+                <AlertDialogTitle>Delete {recipe.title}?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  It moves to Deleted rather than being destroyed: it stops being suggested and
+                  stops appearing when picking a dish, and days already planned with it keep
+                  working. You can put it back at any time.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel className="rounded-full">Keep it</AlertDialogCancel>
+                <AlertDialogAction
+                  className="rounded-full"
+                  onClick={() => {
+                    store.archiveRecipe(recipe.id);
+                    toast(`${recipe.title} moved to Deleted`, {
+                      action: { label: "Undo", onClick: () => store.restoreRecipe(recipe.id) },
+                    });
+                  }}
+                >
+                  Delete
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        )}
       </div>
     </Screen>
   );

@@ -164,7 +164,11 @@ function Dashboard() {
           <section className="surface-card p-4">
             <div className="flex items-center justify-between gap-3">
               <h3 className="font-bold">Buy today</h3>
-              <Link to="/grocery" search={{ week: 0 }} className="text-sm font-semibold text-primary">
+              <Link
+                to="/grocery"
+                search={{ week: 0 }}
+                className="text-sm font-semibold text-primary"
+              >
                 Full list
               </Link>
             </div>
@@ -202,7 +206,13 @@ function Dashboard() {
   );
 }
 
-function TaskGroup({ title, tasks }: { title: string; tasks: ReturnType<typeof useStore>["state"]["tasks"] }) {
+function TaskGroup({
+  title,
+  tasks,
+}: {
+  title: string;
+  tasks: ReturnType<typeof useStore>["state"]["tasks"];
+}) {
   const store = useStore();
   if (!tasks.length) return null;
   return (
@@ -225,9 +235,13 @@ function TaskGroup({ title, tasks }: { title: string; tasks: ReturnType<typeof u
                   className={cn("mt-0.5 h-5 w-5 shrink-0", t.done ? "opacity-100" : "opacity-30")}
                 />
                 <span className="min-w-0 flex-1">
-                  <span className={cn("block", t.done && "line-through opacity-70")}>{t.label}</span>
+                  <span className={cn("block", t.done && "line-through opacity-70")}>
+                    {t.label}
+                  </span>
                   {person ? (
-                    <span className="text-xs font-semibold text-muted-foreground">{person.name}</span>
+                    <span className="text-xs font-semibold text-muted-foreground">
+                      {person.name}
+                    </span>
                   ) : null}
                 </span>
               </button>

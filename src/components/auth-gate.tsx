@@ -7,7 +7,15 @@ import { Input } from "@/components/ui/input";
 import { useAuth } from "@/lib/auth";
 import { cn } from "@/lib/utils";
 
-function Shell({ title, subtitle, children }: { title: string; subtitle: string; children: ReactNode }) {
+function Shell({
+  title,
+  subtitle,
+  children,
+}: {
+  title: string;
+  subtitle: string;
+  children: ReactNode;
+}) {
   return (
     <div className="mx-auto flex min-h-screen w-full max-w-lg flex-col justify-center px-5 py-10">
       <div className="mb-6 text-center">

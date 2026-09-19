@@ -88,7 +88,8 @@ export function RecipeEditor({
         <DialogHeader>
           <DialogTitle>{mode === "create" ? "Add a recipe" : "Edit recipe"}</DialogTitle>
           <DialogDescription>
-            Update quantities whenever a batch was not enough — the change is saved with a timestamp.
+            Update quantities whenever a batch was not enough — the change is saved with a
+            timestamp.
           </DialogDescription>
         </DialogHeader>
 
@@ -257,7 +258,10 @@ export function RecipeEditor({
               rows={4}
               value={draft.prepSteps.join("\n")}
               onChange={(e) =>
-                set("prepSteps", e.target.value.split("\n").filter((s) => s.trim()))
+                set(
+                  "prepSteps",
+                  e.target.value.split("\n").filter((s) => s.trim()),
+                )
               }
             />
           </div>
@@ -269,7 +273,10 @@ export function RecipeEditor({
               rows={5}
               value={draft.cookSteps.join("\n")}
               onChange={(e) =>
-                set("cookSteps", e.target.value.split("\n").filter((s) => s.trim()))
+                set(
+                  "cookSteps",
+                  e.target.value.split("\n").filter((s) => s.trim()),
+                )
               }
             />
           </div>

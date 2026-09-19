@@ -9,9 +9,7 @@
  */
 
 export type AuthRedirect =
-  | { kind: "confirmed"; type: string }
-  | { kind: "error"; message: string }
-  | null;
+  { kind: "confirmed"; type: string } | { kind: "error"; message: string } | null;
 
 const CONFIRM_TYPES = new Set(["signup", "email_change", "invite", "magiclink"]);
 

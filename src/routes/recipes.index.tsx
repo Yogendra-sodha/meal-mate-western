@@ -49,7 +49,10 @@ function RecipeList() {
       ).filter((r) => {
         if (favOnly && !store.state.favorites.includes(r.id)) return false;
         if (cuisine && r.cuisine !== cuisine) return false;
-        if (q && !`${r.title} ${r.description} ${r.tags.join(" ")}`.toLowerCase().includes(q.toLowerCase()))
+        if (
+          q &&
+          !`${r.title} ${r.description} ${r.tags.join(" ")}`.toLowerCase().includes(q.toLowerCase())
+        )
           return false;
         return true;
       }),
@@ -122,12 +125,10 @@ function RecipeList() {
           return (
             <li key={r.id} className="surface-card p-4">
               <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-3">
-                <Link
-                  to="/recipes/$recipeId"
-                  params={{ recipeId: r.id }}
-                  className="min-w-0"
-                >
-                  <p className="text-xs font-bold uppercase tracking-wide text-primary">{r.cuisine}</p>
+                <Link to="/recipes/$recipeId" params={{ recipeId: r.id }} className="min-w-0">
+                  <p className="text-xs font-bold uppercase tracking-wide text-primary">
+                    {r.cuisine}
+                  </p>
                   <h2 className="mt-0.5 font-bold leading-tight">{r.title}</h2>
                   <p className="mt-1 line-clamp-2 text-sm text-muted-foreground">{r.description}</p>
                   <p className="mt-2 text-xs font-semibold text-muted-foreground">
@@ -147,7 +148,12 @@ function RecipeList() {
                   onClick={() => store.toggleFavorite(r.id)}
                   className="grid h-11 w-11 shrink-0 place-items-center self-start rounded-full bg-surface-2"
                 >
-                  <Heart className={cn("h-5 w-5", fav ? "fill-secondary text-secondary" : "text-muted-foreground")} />
+                  <Heart
+                    className={cn(
+                      "h-5 w-5",
+                      fav ? "fill-secondary text-secondary" : "text-muted-foreground",
+                    )}
+                  />
                 </button>
               </div>
             </li>

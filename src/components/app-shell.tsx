@@ -65,9 +65,7 @@ export function PageHeader({
     <header className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 px-4 pt-6 pb-4">
       <div className="min-w-0">
         <h1 className="truncate text-2xl font-bold">{title}</h1>
-        {subtitle ? (
-          <p className="truncate text-sm text-muted-foreground">{subtitle}</p>
-        ) : null}
+        {subtitle ? <p className="truncate text-sm text-muted-foreground">{subtitle}</p> : null}
       </div>
       {action}
     </header>

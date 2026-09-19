@@ -35,10 +35,7 @@ import { toISODate } from "@/lib/planning";
 
 export const Route = createFileRoute("/admin")({
   head: () => ({
-    meta: [
-      { title: "Admin — Bachelor Dinner Planner" },
-      { name: "robots", content: "noindex" },
-    ],
+    meta: [{ title: "Admin — Bachelor Dinner Planner" }, { name: "robots", content: "noindex" }],
   }),
   component: Admin,
 });
@@ -234,7 +231,8 @@ function Households() {
               <div className="min-w-0">
                 <p className="truncate font-bold">{h.name}</p>
                 <p className="mt-0.5 text-xs text-muted-foreground">
-                  Created {new Date(h.created_at).toLocaleDateString()} • {h.default_servings} plates
+                  Created {new Date(h.created_at).toLocaleDateString()} • {h.default_servings}{" "}
+                  plates
                 </p>
               </div>
               <code className="shrink-0 rounded-full bg-primary-container px-3 py-1 text-xs font-bold tracking-wider text-primary-container-foreground">
@@ -458,11 +456,7 @@ function DeleteHouseholdDialog({
           <Button variant="ghost" onClick={onClose}>
             Cancel
           </Button>
-          <Button
-            variant="destructive"
-            disabled={!armed || busy}
-            onClick={() => void remove()}
-          >
+          <Button variant="destructive" disabled={!armed || busy} onClick={() => void remove()}>
             Delete permanently
           </Button>
         </DialogFooter>
@@ -483,7 +477,10 @@ export function parseVatoPaste(raw: string): { text: string; reference: string }
     .map((block) => block.trim())
     .filter(Boolean)
     .map((block) => {
-      const lines = block.split("\n").map((l) => l.trim()).filter(Boolean);
+      const lines = block
+        .split("\n")
+        .map((l) => l.trim())
+        .filter(Boolean);
       const last = lines[lines.length - 1] ?? "";
       // A citation is short and contains bracketed numbers, e.g. "Glory of God (37.1) / (1/1)"
       const isCitation = lines.length > 1 && last.length <= 80 && /\(\d+[./]\d+\)/.test(last);
@@ -637,18 +634,16 @@ function ImportVatoDialog({
     setBusy(true);
     // Duplicate references are skipped by the unique index, so re-importing an
     // overlapping batch is safe.
-    const { error, count } = await supabase
-      .from("vato")
-      .upsert(
-        parsed.map((v, i) => ({
-          text: v.text,
-          // NULL rather than "" so vato without a citation do not collide on
-          // the unique reference index.
-          reference: v.reference || null,
-          position: existing + i + 1,
-        })),
-        { onConflict: "reference", ignoreDuplicates: true, count: "exact" },
-      );
+    const { error, count } = await supabase.from("vato").upsert(
+      parsed.map((v, i) => ({
+        text: v.text,
+        // NULL rather than "" so vato without a citation do not collide on
+        // the unique reference index.
+        reference: v.reference || null,
+        position: existing + i + 1,
+      })),
+      { onConflict: "reference", ignoreDuplicates: true, count: "exact" },
+    );
     setBusy(false);
     if (error) toast.error(error.message);
     else {
@@ -672,7 +667,9 @@ function ImportVatoDialog({
           value={raw}
           onChange={(e) => setRaw(e.target.value)}
           rows={12}
-          placeholder={"First vat text…\nGlory of God (37.1) / (1/1)\n\nSecond vat text…\nReference (2.4) / (1/2)"}
+          placeholder={
+            "First vat text…\nGlory of God (37.1) / (1/1)\n\nSecond vat text…\nReference (2.4) / (1/2)"
+          }
         />
         <p className="text-xs text-muted-foreground">
           {parsed.length} vat{parsed.length === 1 ? "" : "o"} detected
@@ -734,12 +731,7 @@ function EditVatDialog({
         <div className="space-y-3">
           <div className="grid gap-1.5">
             <Label htmlFor="v-text">Text</Label>
-            <Textarea
-              id="v-text"
-              value={text}
-              onChange={(e) => setText(e.target.value)}
-              rows={8}
-            />
+            <Textarea id="v-text" value={text} onChange={(e) => setText(e.target.value)} rows={8} />
           </div>
           <div className="grid gap-1.5">
             <Label htmlFor="v-ref">Reference</Label>

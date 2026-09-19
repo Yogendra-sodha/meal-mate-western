@@ -85,9 +85,10 @@ function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
 
 // Absolute URL for social preview images — link unfurlers do not reliably
 // resolve relative paths. Override per environment with VITE_SITE_URL.
-const SITE_URL = (
-  import.meta.env["VITE_SITE_URL"] || "https://menuweek.vercel.app"
-).replace(/\/$/, "");
+const SITE_URL = (import.meta.env["VITE_SITE_URL"] || "https://menuweek.vercel.app").replace(
+  /\/$/,
+  "",
+);
 
 export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()({
   head: () => ({
@@ -95,12 +96,20 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
       { title: "Bachelor Dinner Planner — Veg Dinner & Grocery Planner" },
-      { name: "description", content: "Plan a week of pure vegetarian, no onion no garlic dinners for 10 roommates, with automatic grocery lists, prep tasks and cooking steps." },
+      {
+        name: "description",
+        content:
+          "Plan a week of pure vegetarian, no onion no garlic dinners for 10 roommates, with automatic grocery lists, prep tasks and cooking steps.",
+      },
       { name: "author", content: "Bachelor Dinner Planner" },
       { name: "theme-color", content: "#e08a3c" },
       { name: "apple-mobile-web-app-capable", content: "yes" },
       { property: "og:title", content: "Bachelor Dinner Planner" },
-      { property: "og:description", content: "Weekly veg meal planning, grocery quantities and kitchen task assignment for a household of 10." },
+      {
+        property: "og:description",
+        content:
+          "Weekly veg meal planning, grocery quantities and kitchen task assignment for a household of 10.",
+      },
       { property: "og:type", content: "website" },
       { property: "og:image", content: `${SITE_URL}/og-image.png` },
       { property: "og:image:width", content: "1200" },

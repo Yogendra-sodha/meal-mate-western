@@ -174,7 +174,6 @@ function RecipeDetail() {
         />
       ) : null}
 
-
       <div className="mt-4 flex flex-wrap gap-2">
         {[1, 2, 3, 4, 5].map((n) => (
           <button
@@ -183,7 +182,12 @@ function RecipeDetail() {
             aria-label={`Rate ${n}`}
             onClick={() => store.rate(recipe.id, n)}
           >
-            <Star className={cn("h-6 w-6", n <= rating ? "fill-primary text-primary" : "text-muted-foreground")} />
+            <Star
+              className={cn(
+                "h-6 w-6",
+                n <= rating ? "fill-primary text-primary" : "text-muted-foreground",
+              )}
+            />
           </button>
         ))}
       </div>
@@ -297,7 +301,6 @@ function RecipeDetail() {
                   ))}
                 </ul>
               </section>
-
             );
           })}
         </TabsContent>

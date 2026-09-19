@@ -10,7 +10,8 @@ export const RECIPES: Recipe[] = [
     id: "gujarati-thali",
     title: "Gujarati Dal, Bhaat, Rotli & Shaak",
     cuisine: "Gujarati",
-    description: "Classic no-onion no-garlic Gujarati thali: sweet-sour dal, rice, rotli and a dry shaak.",
+    description:
+      "Classic no-onion no-garlic Gujarati thali: sweet-sour dal, rice, rotli and a dry shaak.",
     sourceName: "Tarla Dalal",
     sourceUrl: "https://www.tarladalal.com/recipes-for-gujarati-dal-303",
     prepMin: 45,
@@ -178,7 +179,8 @@ export const RECIPES: Recipe[] = [
     cuisine: "Punjabi",
     description: "Slow-simmered chickpeas in tea-darkened masala, without onion and garlic.",
     sourceName: "Swasthi's Recipes",
-    sourceUrl: "https://www.indianhealthyrecipes.com/chana-masala-recipe-punjabi-chole-masala-recipe/",
+    sourceUrl:
+      "https://www.indianhealthyrecipes.com/chana-masala-recipe-punjabi-chole-masala-recipe/",
     prepMin: 30,
     cookMin: 60,
     baseServings: 20,
@@ -375,7 +377,12 @@ export const RECIPES: Recipe[] = [
       { name: "Turmeric", qty: 20, unit: "g", category: "spices", staple: true },
       { name: "Cooking oil", qty: 250, unit: "ml", category: "pantry", staple: true },
     ],
-    prepSteps: ["Soak chana dal 1 hour", "Peel and cube dudhi", "Chop tomatoes", "Knead rotli dough"],
+    prepSteps: [
+      "Soak chana dal 1 hour",
+      "Peel and cube dudhi",
+      "Chop tomatoes",
+      "Knead rotli dough",
+    ],
     cookSteps: [
       "Temper mustard, cumin, hing; add tomatoes and spices",
       "Add soaked chana dal and a little water; cook 15 minutes",
@@ -416,7 +423,8 @@ export const RECIPES: Recipe[] = [
     id: "veg-hakka-noodles",
     title: "Veg Hakka Noodles & Manchurian",
     cuisine: "Indian Chinese",
-    description: "Street-style noodles with dry veg manchurian balls — no onion, no garlic version.",
+    description:
+      "Street-style noodles with dry veg manchurian balls — no onion, no garlic version.",
     sourceName: "Veg Recipes of India",
     sourceUrl: "https://www.vegrecipesofindia.com/veg-hakka-noodles-recipe/",
     prepMin: 45,
@@ -629,7 +637,8 @@ export const RECIPES: Recipe[] = [
     id: "mexican-burrito-bowl",
     title: "Mexican Rice Bowl / Burrito",
     cuisine: "Mexican",
-    description: "Cilantro-lime rice, spicy rajma, salsa, corn and cheese in a build-your-own bowl.",
+    description:
+      "Cilantro-lime rice, spicy rajma, salsa, corn and cheese in a build-your-own bowl.",
     sourceName: "Hebbar's Kitchen",
     sourceUrl: "https://hebbarskitchen.com/burrito-recipe-veg-burrito-recipe/",
     prepMin: 45,
@@ -695,7 +704,8 @@ export const RECIPES: Recipe[] = [
     id: "moong-dal-khichdi",
     title: "Simple Moong Dal Khichdi & Chaas",
     cuisine: "Gujarati",
-    description: "The easiest possible dinner. One pot, ready in 30 minutes, gentle on the stomach.",
+    description:
+      "The easiest possible dinner. One pot, ready in 30 minutes, gentle on the stomach.",
     sourceName: "Veg Recipes of India",
     sourceUrl: "https://www.vegrecipesofindia.com/moong-dal-khichdi-recipe/",
     prepMin: 15,

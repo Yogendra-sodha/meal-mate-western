@@ -1,4 +1,12 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import type { ReactNode } from "react";
 import { toast } from "sonner";
 
@@ -71,11 +79,13 @@ interface StoreValue {
   markCooked: (date: string) => void;
   togglePurchased: (key: string) => void;
   clearPurchased: () => void;
-  /** archive the finished shop and start the list over */
+  /** archive the finished shop and clear the lines it settled */
   finishShopping: (
     items: ShoppingTrip["items"],
     coversWeek: string,
     skipped: string[],
+    /** keys of the generated lines this shop settled: bought or removed */
+    clearedKeys: string[],
     details?: { store?: string | undefined; total?: number | undefined },
   ) => Promise<void>;
   /** drop an archived shop so its week's planned lines come back */
@@ -450,7 +460,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       const { data } = await supabase
         .from("meal_plans")
         .upsert(
-          { household_id: hid, date, servings, updated_by: uid, updated_at: new Date().toISOString() },
+          {
+            household_id: hid,
+            date,
+            servings,
+            updated_by: uid,
+            updated_at: new Date().toISOString(),
+          },
           { onConflict: "household_id,date" },
         )
         .select("id")
@@ -459,7 +475,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       await supabase.from("meal_plan_items").delete().eq("meal_plan_id", data.id);
       if (recipeIds.length) {
         await supabase.from("meal_plan_items").insert(
-          recipeIds.map((recipe_ref, position) => ({ meal_plan_id: data.id, recipe_ref, position })),
+          recipeIds.map((recipe_ref, position) => ({
+            meal_plan_id: data.id,
+            recipe_ref,
+            position,
+          })),
         );
       }
       await supabase.from("cooking_tasks").delete().eq("household_id", hid).eq("date", date);
@@ -473,16 +493,48 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         const recipe = recipesById[rid];
         if (!recipe) return;
         recipe.prepSteps.forEach((label, i) =>
-          tasks.push({ id: `${date}-${rid}-prep-${i}`, date, recipeId: rid, kind: "prep", label, done: false }),
+          tasks.push({
+            id: `${date}-${rid}-prep-${i}`,
+            date,
+            recipeId: rid,
+            kind: "prep",
+            label,
+            done: false,
+          }),
         );
         recipe.cookSteps.forEach((label, i) =>
-          tasks.push({ id: `${date}-${rid}-cook-${i}`, date, recipeId: rid, kind: "cook", label, done: false }),
+          tasks.push({
+            id: `${date}-${rid}-cook-${i}`,
+            date,
+            recipeId: rid,
+            kind: "cook",
+            label,
+            done: false,
+          }),
         );
       });
       tasks.push(
-        { id: `${date}-chore-lunch`, date, kind: "chore", label: "Pack 10 lunch boxes for tomorrow", done: false },
-        { id: `${date}-chore-dishes`, date, kind: "chore", label: "Wash dishes & clean kitchen", done: false },
-        { id: `${date}-chore-table`, date, kind: "chore", label: "Set the table, water, salad & papad", done: false },
+        {
+          id: `${date}-chore-lunch`,
+          date,
+          kind: "chore",
+          label: "Pack 10 lunch boxes for tomorrow",
+          done: false,
+        },
+        {
+          id: `${date}-chore-dishes`,
+          date,
+          kind: "chore",
+          label: "Wash dishes & clean kitchen",
+          done: false,
+        },
+        {
+          id: `${date}-chore-table`,
+          date,
+          kind: "chore",
+          label: "Set the table, water, salad & papad",
+          done: false,
+        },
       );
       return tasks;
     };
@@ -732,9 +784,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         });
         void writeCheck(key, { qty_override: null, unit_override: null });
       },
-      finishShopping: async (items, coversWeek, skipped, details) => {
+      finishShopping: async (items, coversWeek, skipped, clearedKeys, details) => {
         if (!hid) return;
-        await supabase.from("shopping_trips").insert({
+        // Checked before anything is deleted. The deletes below are what empty
+        // the list, and the trip is the only copy of what was on it — losing
+        // the insert and doing them anyway would throw the shop away.
+        const { error } = await supabase.from("shopping_trips").insert({
           household_id: hid,
           items,
           skipped,
@@ -743,10 +798,25 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           total: details?.total ?? null,
           created_by: uid,
         });
-        // Ticks, removals and pinned amounts belonged to this trip, so they go.
-        // The dismissals have already been carried into the trip as skipped
-        // names, which is what keeps those lines off the week.
-        await supabase.from("grocery_checks").delete().eq("household_id", hid);
+        if (error) {
+          console.error("[store] could not save the shop:", error.message);
+          toast.error("Could not save the shop — nothing was cleared");
+          return;
+        }
+        // Only the lines this trip settled: the ones ticked and the ones
+        // removed. Their dismissals are already carried into the trip as
+        // skipped names, which is what keeps them off the week.
+        //
+        // A line that was not bought keeps its row, because that row is also
+        // where a pinned amount lives — and an amount pinned for something
+        // still to buy is still wanted.
+        if (clearedKeys.length) {
+          await supabase
+            .from("grocery_checks")
+            .delete()
+            .eq("household_id", hid)
+            .in("item_key", clearedKeys);
+        }
         // Only the hand-added items that were actually bought. Clearing all of
         // them made sense when finishing meant every last item was ticked;
         // now that part of a shop can be saved, an unticked one has not been
@@ -790,7 +860,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           if (t) t.done = done;
           return d;
         });
-        void patchTask(id, { completed: done, completed_at: done ? new Date().toISOString() : null });
+        void patchTask(id, {
+          completed: done,
+          completed_at: done ? new Date().toISOString() : null,
+        });
       },
       assignTask: (id, assignee) => {
         update((d) => {
@@ -891,16 +964,16 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         });
         if (!hid) return;
         send(
-          supabase
-            .from("recipe_archive")
-            .delete()
-            .eq("household_id", hid)
-            .eq("recipe_ref", id),
+          supabase.from("recipe_archive").delete().eq("household_id", hid).eq("recipe_ref", id),
           "the restored recipe",
         );
       },
       addRecipe: (recipe) => {
-        const stamped = { ...recipe, updatedAt: new Date().toISOString(), updatedBy: uid ?? undefined };
+        const stamped = {
+          ...recipe,
+          updatedAt: new Date().toISOString(),
+          updatedBy: uid ?? undefined,
+        };
         update((d) => {
           d.customRecipes.push(stamped);
           return d;
@@ -910,7 +983,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       updateRecipe: (id, patch) => {
         const base = recipesById[id];
         if (!base) return;
-        const next = { ...base, ...patch, id, updatedAt: new Date().toISOString(), updatedBy: uid ?? undefined } as Recipe;
+        const next = {
+          ...base,
+          ...patch,
+          id,
+          updatedAt: new Date().toISOString(),
+          updatedBy: uid ?? undefined,
+        } as Recipe;
         update((d) => {
           const custom = d.customRecipes.findIndex((r) => r.id === id);
           if (custom >= 0) d.customRecipes[custom] = next;
@@ -1072,12 +1151,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           imported += local.cart.length;
         }
         if (local.favorites?.length) {
-          await supabase
-            .from("recipe_favorites")
-            .upsert(
-              local.favorites.map((recipe_ref) => ({ household_id: hid, recipe_ref })),
-              { onConflict: "household_id,recipe_ref" },
-            );
+          await supabase.from("recipe_favorites").upsert(
+            local.favorites.map((recipe_ref) => ({ household_id: hid, recipe_ref })),
+            { onConflict: "household_id,recipe_ref" },
+          );
           imported += local.favorites.length;
         }
         try {

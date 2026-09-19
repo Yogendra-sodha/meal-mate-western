@@ -27,7 +27,11 @@ export const WEEKDAY_THEMES: { label: string; hint: string; pick: (r: Recipe) =>
     hint: "Bhindi bateta, ringan bateta, dudhi chana, kobi bateta",
     pick: (r) => r.tags.includes("green"),
   },
-  { label: "Keep it simple", hint: "Low effort, fast to cook", pick: (r) => r.tags.includes("quick") },
+  {
+    label: "Keep it simple",
+    hint: "Low effort, fast to cook",
+    pick: (r) => r.tags.includes("quick"),
+  },
   {
     label: "Special meal",
     hint: "Restaurant style: paneer, dosa, chaat, pizza, pasta, Mexican",
@@ -44,7 +48,6 @@ export function parseISODate(s: string) {
   return new Date(y ?? 1970, (m ?? 1) - 1, d ?? 1);
 }
 
-/** 0 = Sunday, so a planned week runs Sunday through Saturday. */
 /**
  * Saturday. The week is planned on a Saturday for the week ahead, so that is
  * where it starts — a Sunday-based week would split every menu across two.
@@ -101,9 +104,8 @@ export function weekRangeLabel(startIso: string, endIso: string) {
     : `${format.format(start)} \u2013 ${format.format(end)}`;
 }
 
-/** Suggest a recipe for a date, respecting the weekday theme and avoiding recent repeats. */
 /**
- * Picks a dish for a day.
+ * Picks a dish for a day, respecting the weekday theme and avoiding repeats.
  *
  * `choices` is the pool to choose out of, and defaults to the built-in set only
  * so older callers keep working. Passing the household's own list is what

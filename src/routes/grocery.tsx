@@ -239,11 +239,18 @@ function Grocery() {
     // it stays on the list rather than being filed away as purchased — which
     // is what let a part-finished shop archive the whole list.
     const picked = rows.filter((r) => r.done);
+    const dismissedLines = lines.filter((l) => state.dismissed[l.key]);
     await store.finishShopping(
       picked.map((r) => ({ name: r.name, qty: r.qty, unit: r.unit, category: r.category })),
       weekStart,
       // Lines removed from this week's list: not bought, but not wanted back.
-      lines.filter((l) => state.dismissed[l.key]).map((l) => l.name),
+      dismissedLines.map((l) => l.name),
+      // What this shop settled. An unticked line is deliberately left out, so
+      // an amount pinned onto it survives into the next shop.
+      [
+        ...picked.flatMap((r) => (r.source === "planned" && r.key ? [r.key] : [])),
+        ...dismissedLines.map((l) => l.key),
+      ],
       {
         store: store_.trim() || undefined,
         total: Number(total) > 0 ? Number(total) : undefined,

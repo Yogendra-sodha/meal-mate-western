@@ -4,16 +4,26 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 
 /**
- * Last day the tip appears. After this it never shows again, whatever is
- * stored on anyone's phone — the point is to teach a one-off trick, not to
- * become a permanent fixture.
+ * How long the tip follows one person around, from the first time they see it.
+ *
+ * It used to be a fixed last day, which quietly went wrong: the date was
+ * chosen when the banner was written, so the fortnight ran against the
+ * calendar rather than against anyone opening the app. Deploy a week late and
+ * half the run is gone; deploy later still and nobody is ever taught the
+ * trick. Counting from first sight also means someone joining the house in
+ * March gets the same two weeks, instead of a tip that expired before they
+ * arrived.
+ *
+ * It is still a one-off lesson, not a fixture: two weeks per person, and gone
+ * for good the moment they say they have done it.
  */
-const CAMPAIGN_END = new Date("2026-09-12T23:59:59Z").getTime();
+const WINDOW_DAYS = 14;
 
 /** Seconds on screen before it closes itself. */
 const VISIBLE_SECONDS = 10;
 
 const DISMISSED_KEY = "bdp.a2hs.done";
+const FIRST_SEEN_KEY = "bdp.a2hs.first";
 
 /** The install prompt Chromium fires; absent on iOS, which has no such API. */
 interface InstallPromptEvent extends Event {
@@ -87,14 +97,21 @@ export function AddToHomeBanner() {
   }, []);
 
   useEffect(() => {
-    if (Date.now() > CAMPAIGN_END || isInstalled()) return;
-    let dismissed = false;
+    if (isInstalled()) return;
+
     try {
-      dismissed = localStorage.getItem(DISMISSED_KEY) === "1";
+      if (localStorage.getItem(DISMISSED_KEY) === "1") return;
+
+      // First sight starts the clock. A phone that refuses storage cannot be
+      // kept track of at all, so it sees the tip each visit until it is
+      // dismissed — the same as it already did for dismissals.
+      const stored = Number(localStorage.getItem(FIRST_SEEN_KEY));
+      const firstSeen = Number.isFinite(stored) && stored > 0 ? stored : Date.now();
+      if (Date.now() - firstSeen > WINDOW_DAYS * 24 * 60 * 60 * 1000) return;
+      localStorage.setItem(FIRST_SEEN_KEY, String(firstSeen));
     } catch {
-      dismissed = false;
+      // Show it anyway rather than swallowing the tip over a storage error.
     }
-    if (dismissed) return;
 
     setVisible(true);
     timer.current = setInterval(() => {

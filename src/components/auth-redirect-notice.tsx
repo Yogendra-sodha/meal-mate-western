@@ -20,6 +20,10 @@ export function AuthRedirectNotice() {
       return;
     }
 
+    // A recovery link gets a screen asking for the new password, so saying
+    // anything here would only talk over it.
+    if (authRedirect.kind === "recovery") return;
+
     toast.success(
       authRedirect.type === "email_change"
         ? "Email address confirmed"

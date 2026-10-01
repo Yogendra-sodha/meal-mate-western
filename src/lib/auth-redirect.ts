@@ -9,7 +9,10 @@
  */
 
 export type AuthRedirect =
-  { kind: "confirmed"; type: string } | { kind: "error"; message: string } | null;
+  | { kind: "confirmed"; type: string }
+  | { kind: "recovery" }
+  | { kind: "error"; message: string }
+  | null;
 
 const CONFIRM_TYPES = new Set(["signup", "email_change", "invite", "magiclink"]);
 
@@ -33,6 +36,11 @@ function read(): AuthRedirect {
   if (error) return { kind: "error", message: humanise(error) };
 
   const type = get("type");
+  // Recovery is not a confirmation. The link signs the person in, but the
+  // password it was sent about is still the one they could not remember, so
+  // this has to be told apart from "your email is verified" — it is the one
+  // case where the app owes them a screen rather than a toast.
+  if (type === "recovery") return { kind: "recovery" };
   if (type && CONFIRM_TYPES.has(type)) return { kind: "confirmed", type };
 
   return null;

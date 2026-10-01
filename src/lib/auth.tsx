@@ -31,6 +31,10 @@ interface AuthValue {
   refresh: () => Promise<void>;
   signUp: (name: string, email: string, password: string) => Promise<void>;
   signIn: (email: string, password: string) => Promise<void>;
+  /** email a recovery link to whoever owns that address, if anyone does */
+  sendPasswordReset: (email: string) => Promise<void>;
+  /** set a new password for the person currently signed in */
+  setPassword: (password: string) => Promise<void>;
   signOut: () => Promise<void>;
   createHousehold: (name: string) => Promise<void>;
   joinHousehold: (code: string) => Promise<void>;
@@ -156,6 +160,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       },
       signIn: async (email, password) => {
         const { error } = await supabase.auth.signInWithPassword({ email, password });
+        if (error) throw error;
+      },
+      sendPasswordReset: async (email) => {
+        // Supabase deliberately succeeds for an address it has never seen, so
+        // that the form cannot be used to find out who has an account. The
+        // screen says the same thing either way, which is the point.
+        const { error } = await supabase.auth.resetPasswordForEmail(email, {
+          redirectTo: window.location.origin,
+        });
+        if (error) throw error;
+      },
+      setPassword: async (password) => {
+        const { error } = await supabase.auth.updateUser({ password });
         if (error) throw error;
       },
       signOut: async () => {

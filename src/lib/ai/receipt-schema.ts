@@ -119,9 +119,23 @@ export function parseReceiptOutput(payload: unknown): ReceiptResult | null {
 
   const receipt = normaliseReceipt(envelope.data.receipt);
   if (!receipt) return null;
+
   // Nothing readable on it. Reported as unreadable rather than as a success
   // with an empty list, so the UI can say "try a clearer photo".
   if (!receipt.lines.length && !receipt.totalStated) return { ok: false, reason: "unreadable" };
+
+  // The second gate on "that is not a receipt", and the one that does not
+  // depend on the model agreeing.
+  //
+  // Asking it to refuse is necessary but not sufficient: photograph a recipe
+  // and a model keen to be useful produces a tidy list of ingredient names
+  // with every price at zero, which passes every check above. What separates a
+  // till slip from any other list of food words is that money is printed on
+  // it. No price anywhere and no total means this was not a receipt, whatever
+  // the reply claimed.
+  const showsMoney = receipt.totalStated || receipt.lines.some((line) => line.price > 0);
+  if (!showsMoney) return { ok: false, reason: "not_a_receipt" };
+
   return { ok: true, receipt };
 }
 

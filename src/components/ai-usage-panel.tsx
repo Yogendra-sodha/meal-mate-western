@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { supabase } from "@/integrations/supabase/client";
+import { cn } from "@/lib/utils";
 
 interface Settings {
   household_id: string;
@@ -19,6 +20,7 @@ interface Settings {
   video_output_cost_per_mtok: number;
   receipt_input_cost_per_mtok: number;
   receipt_output_cost_per_mtok: number;
+  receipt_provider: string;
 }
 
 interface UsageRow {
@@ -60,7 +62,7 @@ export function AiUsagePanel() {
       supabase
         .from("ai_settings")
         .select(
-          "household_id, enabled, daily_calls_per_user, monthly_cost_cap_cents, input_cost_per_mtok, output_cost_per_mtok, video_input_cost_per_mtok, video_output_cost_per_mtok, receipt_input_cost_per_mtok, receipt_output_cost_per_mtok",
+          "household_id, enabled, daily_calls_per_user, monthly_cost_cap_cents, input_cost_per_mtok, output_cost_per_mtok, video_input_cost_per_mtok, video_output_cost_per_mtok, receipt_input_cost_per_mtok, receipt_output_cost_per_mtok, receipt_provider",
         )
         .limit(1)
         .maybeSingle(),
@@ -212,6 +214,38 @@ export function AiUsagePanel() {
           separately. These only work out the running total — correct them here if a provider
           changes its prices, no deploy needed.
         </p>
+
+        <div className="mt-4">
+          <Label className="text-sm font-bold">Receipt reader</Label>
+          <div className="mt-2 grid grid-cols-2 gap-1 rounded-full bg-surface-2 p-1">
+            {(
+              [
+                ["gemini", "Gemini"],
+                ["openai", "OpenAI"],
+              ] as const
+            ).map(([id, label]) => (
+              <button
+                key={id}
+                type="button"
+                onClick={() => void patch({ receipt_provider: id })}
+                className={cn(
+                  "rounded-full py-2 text-sm font-bold",
+                  settings.receipt_provider === id
+                    ? "bg-primary text-primary-foreground"
+                    : "text-muted-foreground",
+                )}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          <p className="mt-2 text-xs text-muted-foreground">
+            Gemini by default: on published receipt tests it reads them more accurately and uses a
+            fraction of the tokens per photo. Those tests are not run on the kind of till slip this
+            house gets, though, so scan the same receipt with each and keep whichever does better.
+            Remember to set the two receipt prices above to match whichever is selected.
+          </p>
+        </div>
       </section>
 
       <section className="surface-card overflow-hidden">

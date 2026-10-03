@@ -55,11 +55,22 @@ export const scanReceipt = createServerFn({ method: "POST" })
     if (!data.imageBase64) return { ok: false, refusal: "bad_image" };
     if (data.imageBase64.length > MAX_IMAGE_BASE64) return { ok: false, refusal: "too_large" };
 
-    const { getImageProvider } = await import("@/lib/ai/provider.server");
-    const provider = getImageProvider();
-    if (!provider) return { ok: false, refusal: "not_configured" };
-
     const { supabase } = context;
+
+    // Which model reads it is the household's choice, so that both can be
+    // tried on real receipts without a deploy between attempts. The row may
+    // not exist yet — claim_ai_call creates it — in which case the default
+    // applies, same as the column's.
+    const { data: settings } = await supabase
+      .from("ai_settings")
+      .select("receipt_provider")
+      .limit(1)
+      .maybeSingle();
+    const prefer = settings?.receipt_provider === "openai" ? "openai" : "gemini";
+
+    const { getImageProvider } = await import("@/lib/ai/provider.server");
+    const provider = getImageProvider(prefer);
+    if (!provider) return { ok: false, refusal: "not_configured" };
     const { data: claim, error: claimError } = await supabase.rpc("claim_ai_call");
     if (claimError) throw new Error(`Could not check the AI allowance: ${claimError.message}`);
 

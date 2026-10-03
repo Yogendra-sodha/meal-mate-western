@@ -15,7 +15,7 @@ const MESSAGES: Record<ScanRefusal, string> = {
   monthly_cap: "This month's AI budget is used up.",
   bad_image: "That file is not a photo. Take a picture of the receipt.",
   too_large: "That image is too big even after shrinking — try taking it again.",
-  not_a_receipt: "That does not look like a receipt.",
+  not_a_receipt: "That is not a receipt — no prices on it. Photograph the till slip.",
   unreadable: "Could not read it. Try again with more light and the whole receipt in frame.",
   invalid_output: "The reply came back garbled. Try once more.",
   provider_error: "Could not reach the model.",

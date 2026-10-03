@@ -297,13 +297,120 @@ class GeminiImageProvider implements ImageProvider {
   }
 }
 
-/** Builds the image provider, or null when no Gemini key is configured. */
-export function getImageProvider(): ImageProvider | null {
-  const apiKey = process.env["GEMINI_API_KEY"];
-  if (!apiKey) return null;
-  const model =
-    process.env["GEMINI_IMAGE_MODEL"] ?? process.env["GEMINI_MODEL"] ?? "gemini-3.1-flash-lite";
-  return new GeminiImageProvider(apiKey, model);
+/**
+ * The OpenAI-compatible route to the same job, for comparison.
+ *
+ * Published receipt-extraction benchmarks put Gemini ahead on both accuracy
+ * and tokens per image, which is why it is the default — but a benchmark run
+ * on American invoices says little about an Indian grocery till slip printing
+ * "GV PNR 400G", so the choice is a setting and this is the other option.
+ *
+ * Asked for json_object rather than a strict schema: the prompt already spells
+ * the shape out for Gemini's benefit, and the validator on the reply is the
+ * actual gate either way. One shape of prompt, two providers.
+ */
+class OpenAiImageProvider implements ImageProvider {
+  constructor(
+    private readonly apiKey: string,
+    private readonly baseUrl: string,
+    readonly model: string,
+  ) {}
+
+  async completeFromImage(
+    system: string,
+    imageBase64: string,
+    mimeType: string,
+  ): Promise<CompletionResult> {
+    // Same two spellings of the token limit as the text path, for the same
+    // reason: newer models reject max_tokens, older hosts only know it.
+    let response = await this.post(system, imageBase64, mimeType, "max_completion_tokens");
+    if (!response.ok) {
+      const detail = await response.clone().text();
+      if (/max_tokens/i.test(detail)) {
+        response = await this.post(system, imageBase64, mimeType, "max_tokens");
+      }
+    }
+
+    if (!response.ok) {
+      const body = await response.text();
+      throw Object.assign(new Error(`Model provider returned ${response.status}`), {
+        status: response.status,
+        detail: readProviderMessage(body),
+      });
+    }
+
+    const body = (await response.json()) as {
+      model?: string;
+      choices?: { message?: { content?: string }; finish_reason?: string }[];
+      usage?: { prompt_tokens?: number; completion_tokens?: number };
+    };
+
+    return {
+      text: body.choices?.[0]?.message?.content ?? "",
+      finishReason: body.choices?.[0]?.finish_reason ?? "",
+      model: body.model ?? this.model,
+      promptTokens: body.usage?.prompt_tokens ?? 0,
+      completionTokens: body.usage?.completion_tokens ?? 0,
+    };
+  }
+
+  private post(system: string, imageBase64: string, mimeType: string, tokenLimitKey: string) {
+    return fetch(`${this.baseUrl.replace(/\/$/, "")}/chat/completions`, {
+      method: "POST",
+      headers: { "content-type": "application/json", authorization: `Bearer ${this.apiKey}` },
+      body: JSON.stringify({
+        model: this.model,
+        [tokenLimitKey]: MAX_OUTPUT_TOKENS,
+        messages: [
+          { role: "system", content: system },
+          {
+            role: "user",
+            content: [
+              { type: "text", text: "Read this receipt into the JSON object described above." },
+              // Inline bytes travel as a data URL on this API, not as a field
+              // of their own the way Gemini takes them.
+              { type: "image_url", image_url: { url: `data:${mimeType};base64,${imageBase64}` } },
+            ],
+          },
+        ],
+        response_format: { type: "json_object" },
+      }),
+    });
+  }
+}
+
+/** Which model reads the photo. Gemini unless the household has said otherwise. */
+export type ImageProviderChoice = "gemini" | "openai";
+
+/**
+ * Builds the chosen image provider, falling back to the other when its key is
+ * missing, or null when neither is configured.
+ *
+ * Falling back rather than failing: both keys live in the same place, and a
+ * household that has only one of them should get a working scanner rather than
+ * "not set up" because a setting names the key they do not have.
+ */
+export function getImageProvider(prefer: ImageProviderChoice = "gemini"): ImageProvider | null {
+  const geminiKey = process.env["GEMINI_API_KEY"];
+  const openAiKey = process.env["AI_API_KEY"] ?? process.env["OPENAI_API_KEY"];
+
+  const gemini = () => {
+    if (!geminiKey) return null;
+    const model =
+      process.env["GEMINI_IMAGE_MODEL"] ?? process.env["GEMINI_MODEL"] ?? "gemini-3.1-flash-lite";
+    return new GeminiImageProvider(geminiKey, model);
+  };
+
+  const openai = () => {
+    if (!openAiKey) return null;
+    const baseUrl = process.env["AI_BASE_URL"] ?? "https://api.openai.com/v1";
+    // The text model unless a vision-specific one is named: on a multimodal
+    // model they are the same id, and where they are not this is the override.
+    const model = process.env["AI_VISION_MODEL"] ?? process.env["AI_MODEL"] ?? "gpt-5.6-luna";
+    return new OpenAiImageProvider(openAiKey, baseUrl, model);
+  };
+
+  return prefer === "openai" ? (openai() ?? gemini()) : (gemini() ?? openai());
 }
 
 /**

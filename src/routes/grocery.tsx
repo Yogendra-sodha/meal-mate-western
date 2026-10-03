@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { PageHeader, Screen } from "@/components/app-shell";
 import { EditedBy } from "@/components/edited-by";
 import { PastShops } from "@/components/past-shops";
+import { ReceiptScanner } from "@/components/receipt-scanner";
 import { SwipeToDelete } from "@/components/swipe-to-delete";
 import { Button } from "@/components/ui/button";
 import {
@@ -542,6 +543,14 @@ function Grocery() {
                 />
               </div>
             </div>
+
+            <ReceiptScanner
+              listNames={rows.map((r) => r.name)}
+              onRead={({ store, total: read }) => {
+                if (store) setStore(store);
+                if (read !== null) setTotal(String(read));
+              }}
+            />
 
             <div className="flex gap-2">
               <Button

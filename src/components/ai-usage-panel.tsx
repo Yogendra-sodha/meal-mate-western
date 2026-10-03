@@ -17,6 +17,8 @@ interface Settings {
   output_cost_per_mtok: number;
   video_input_cost_per_mtok: number;
   video_output_cost_per_mtok: number;
+  receipt_input_cost_per_mtok: number;
+  receipt_output_cost_per_mtok: number;
 }
 
 interface UsageRow {
@@ -58,7 +60,7 @@ export function AiUsagePanel() {
       supabase
         .from("ai_settings")
         .select(
-          "household_id, enabled, daily_calls_per_user, monthly_cost_cap_cents, input_cost_per_mtok, output_cost_per_mtok, video_input_cost_per_mtok, video_output_cost_per_mtok",
+          "household_id, enabled, daily_calls_per_user, monthly_cost_cap_cents, input_cost_per_mtok, output_cost_per_mtok, video_input_cost_per_mtok, video_output_cost_per_mtok, receipt_input_cost_per_mtok, receipt_output_cost_per_mtok",
         )
         .limit(1)
         .maybeSingle(),
@@ -190,11 +192,25 @@ export function AiUsagePanel() {
             step="0.01"
             onCommit={(v) => void patch({ video_output_cost_per_mtok: v })}
           />
+          <NumberField
+            id="ai-rin"
+            label="Receipt: input per 1M ($)"
+            value={settings.receipt_input_cost_per_mtok}
+            step="0.01"
+            onCommit={(v) => void patch({ receipt_input_cost_per_mtok: v })}
+          />
+          <NumberField
+            id="ai-rout"
+            label="Receipt: output per 1M ($)"
+            value={settings.receipt_output_cost_per_mtok}
+            step="0.01"
+            onCommit={(v) => void patch({ receipt_output_cost_per_mtok: v })}
+          />
         </div>
         <p className="mt-2 text-xs text-muted-foreground">
-          Notes and video go to different models at different rates, so each is priced separately.
-          These only work out the running total — correct them here if a provider changes its
-          prices, no deploy needed.
+          Notes, video and receipts go to different models at different rates, so each is priced
+          separately. These only work out the running total — correct them here if a provider
+          changes its prices, no deploy needed.
         </p>
       </section>
 
@@ -216,8 +232,8 @@ export function AiUsagePanel() {
               >
                 <span className="min-w-0">
                   <span className="block truncate text-sm font-semibold">
-                    {names[r.user_id ?? ""] ?? "Someone"} • {r.source === "video" ? "🎬" : "📝"}{" "}
-                    {r.outcome}
+                    {names[r.user_id ?? ""] ?? "Someone"} •{" "}
+                    {r.source === "video" ? "🎬" : r.source === "receipt" ? "🧾" : "📝"} {r.outcome}
                   </span>
                   <span className="block text-xs text-muted-foreground">
                     {new Date(r.created_at).toLocaleString()} • {r.prompt_tokens}+

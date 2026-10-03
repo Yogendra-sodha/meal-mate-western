@@ -215,6 +215,97 @@ export function getVideoProvider(): VideoProvider | null {
   return new GeminiVideoProvider(apiKey, model);
 }
 
+/** A model that can read a photograph. */
+export interface ImageProvider {
+  model: string;
+  /** Reads the image and answers the system prompt about it. */
+  completeFromImage(
+    system: string,
+    imageBase64: string,
+    mimeType: string,
+  ): Promise<CompletionResult>;
+}
+
+/**
+ * Gemini again, handed the bytes rather than a link.
+ *
+ * Its own interface for the same reason the video one has its own: a photo is
+ * sent inline as base64 and billed by the number of tiles the image covers,
+ * which is nothing like a prompt's length or a video's duration. Media
+ * resolution is left at the default here — the whole job is reading small
+ * printed text, and sampling it coarsely to save tokens would defeat it.
+ */
+class GeminiImageProvider implements ImageProvider {
+  constructor(
+    private readonly apiKey: string,
+    readonly model: string,
+  ) {}
+
+  async completeFromImage(
+    system: string,
+    imageBase64: string,
+    mimeType: string,
+  ): Promise<CompletionResult> {
+    const base = process.env["GEMINI_BASE_URL"] ?? "https://generativelanguage.googleapis.com";
+    const response = await fetch(
+      `${base.replace(/\/$/, "")}/v1beta/models/${this.model}:generateContent`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json", "x-goog-api-key": this.apiKey },
+        body: JSON.stringify({
+          systemInstruction: { parts: [{ text: system }] },
+          contents: [
+            {
+              role: "user",
+              parts: [
+                // Inline bytes need their real mime type, unlike a YouTube uri
+                // which takes none.
+                { inlineData: { mimeType, data: imageBase64 } },
+                { text: "Read this receipt into the JSON object described above." },
+              ],
+            },
+          ],
+          generationConfig: {
+            responseMimeType: "application/json",
+            maxOutputTokens: MAX_OUTPUT_TOKENS,
+          },
+        }),
+      },
+    );
+
+    if (!response.ok) {
+      const body = await response.text();
+      throw Object.assign(new Error(`Gemini returned ${response.status}`), {
+        status: response.status,
+        detail: readProviderMessage(body),
+      });
+    }
+
+    const body = (await response.json()) as {
+      candidates?: { content?: { parts?: { text?: string }[] }; finishReason?: string }[];
+      usageMetadata?: { promptTokenCount?: number; candidatesTokenCount?: number };
+    };
+    const candidate = body.candidates?.[0];
+
+    return {
+      text: (candidate?.content?.parts ?? []).map((p) => p.text ?? "").join(""),
+      finishReason: candidate?.finishReason ?? "",
+      model: this.model,
+      promptTokens: body.usageMetadata?.promptTokenCount ?? 0,
+      completionTokens: body.usageMetadata?.candidatesTokenCount ?? 0,
+    };
+  }
+}
+
+/** Builds the image provider, or null when no Gemini key is configured. */
+export function getImageProvider(): ImageProvider | null {
+  const apiKey = process.env["GEMINI_API_KEY"];
+  if (!apiKey) return null;
+  const model =
+    process.env["GEMINI_IMAGE_MODEL"] ?? process.env["GEMINI_MODEL"] ?? "gemini-3.1-flash-lite";
+  return new GeminiImageProvider(apiKey, model);
+}
+
 /**
  * Digs the human-readable part out of a provider's error body.
  *

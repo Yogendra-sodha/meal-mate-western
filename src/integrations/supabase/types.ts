@@ -24,6 +24,8 @@ export type Database = {
           output_cost_per_mtok: number
           video_input_cost_per_mtok: number
           video_output_cost_per_mtok: number
+          receipt_input_cost_per_mtok: number
+          receipt_output_cost_per_mtok: number
           updated_at: string
           updated_by: string | null
         }
@@ -36,6 +38,8 @@ export type Database = {
           output_cost_per_mtok?: number
           video_input_cost_per_mtok?: number
           video_output_cost_per_mtok?: number
+          receipt_input_cost_per_mtok?: number
+          receipt_output_cost_per_mtok?: number
           updated_at?: string
           updated_by?: string | null
         }
@@ -48,6 +52,8 @@ export type Database = {
           output_cost_per_mtok?: number
           video_input_cost_per_mtok?: number
           video_output_cost_per_mtok?: number
+          receipt_input_cost_per_mtok?: number
+          receipt_output_cost_per_mtok?: number
           updated_at?: string
           updated_by?: string | null
         }

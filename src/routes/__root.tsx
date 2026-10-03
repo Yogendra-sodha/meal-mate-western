@@ -45,7 +45,10 @@ function NotFoundComponent() {
   );
 }
 
-function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
+// `error` is unknown, not Error: a thrown value can be anything, and the
+// router stopped pretending otherwise. Nothing here needed it to be an Error —
+// it is logged and reported, both of which take whatever arrives.
+function ErrorComponent({ error, reset }: { error: unknown; reset: () => void }) {
   console.error(error);
   const router = useRouter();
   useEffect(() => {

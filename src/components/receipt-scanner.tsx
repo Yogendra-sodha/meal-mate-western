@@ -41,9 +41,11 @@ export interface ScannedReceipt {
  * and "GV PNR 400G" for tomatoes and paneer, which no amount of string
  * comparison untangles.
  *
- * What it will not do is add anything. Items on the receipt that are not on
- * the list are shown and left alone — those printed names are abbreviations
- * nobody would recognise in a pantry a week later.
+ * Everything on the slip ends up on the list: what was already there gets
+ * ticked, and what was not gets added, ticked, under the everyday name the
+ * model gave rather than the till's abbreviation. That way the shop filed
+ * afterwards is the bill that was paid, not the part of it somebody had
+ * thought to plan.
  */
 export function ReceiptScanner({
   listNames,
@@ -52,7 +54,8 @@ export function ReceiptScanner({
 }: {
   /** everything currently on the list, for the model to match lines against */
   listNames: string[];
-  onScanned: (result: ScannedReceipt) => void;
+  /** applies the receipt and answers how many items it had to add */
+  onScanned: (result: ScannedReceipt) => Promise<number> | number;
   label?: string;
 }) {
   const input = useRef<HTMLInputElement | null>(null);
@@ -84,7 +87,7 @@ export function ReceiptScanner({
       const matched = matchedListNames(receipt.lines);
       const rest = unmatchedLines(receipt.lines);
 
-      onScanned({
+      const added = await onScanned({
         store: receipt.store,
         total: receipt.totalStated ? receipt.total : null,
         matched,
@@ -96,11 +99,14 @@ export function ReceiptScanner({
       setExtras(rest);
 
       const merged = receipt.lines.filter((l) => l.mergedFrom > 1).length;
+      const parts: string[] = [];
+      if (matched.length) parts.push(`ticked off ${matched.length}`);
+      if (added) parts.push(`added ${added} more`);
+      if (merged) parts.push(`added up ${merged} repeated ${merged === 1 ? "line" : "lines"}`);
       toast.success(
-        matched.length
-          ? `Ticked off ${matched.length} ${matched.length === 1 ? "item" : "items"}` +
-              (merged ? ` • ${merged} repeated ${merged === 1 ? "line" : "lines"} added up` : "")
-          : "Read the receipt, but nothing on it was on your list",
+        parts.length
+          ? `Receipt read — ${parts.join(", ")}`
+          : "Receipt read, but there was nothing new on it",
       );
     } catch (error) {
       console.error("[receipt] scan failed:", error);
@@ -142,17 +148,19 @@ export function ReceiptScanner({
         extras.length ? (
           <div className="mt-3 rounded-2xl bg-surface-2 p-3">
             <p className="text-sm font-bold">
-              Also on the receipt ({extras.length} of {lineCount})
+              Added from the receipt ({extras.length} of {lineCount})
             </p>
             <p className="mt-0.5 text-xs text-muted-foreground">
-              Bought but not on this week's list, so nothing was ticked for these. The names are as
-              the till printed them.
+              Bought but not on this week's list, so they were added and ticked off. Shown here
+              under the name the till printed, next to what they went on the list as.
             </p>
             <ul className="mt-2 space-y-0.5 text-sm">
               {extras.slice(0, 12).map((line, i) => (
                 <li key={`${line.name}-${i}`} className="flex justify-between gap-3">
                   <span className="min-w-0 truncate">
-                    {line.name}
+                    {line.cleanName && line.cleanName !== line.name
+                      ? `${line.cleanName} — ${line.name}`
+                      : line.name}
                     {line.mergedFrom > 1 ? ` ×${line.mergedFrom}` : ""}
                   </span>
                   {line.price > 0 ? (
@@ -169,7 +177,7 @@ export function ReceiptScanner({
           </div>
         ) : (
           <p className="mt-3 text-sm text-muted-foreground">
-            Every line on the receipt was on your list.
+            Every line on the receipt was already on your list.
           </p>
         )
       ) : null}

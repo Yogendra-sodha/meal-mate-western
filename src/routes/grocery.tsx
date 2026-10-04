@@ -235,24 +235,56 @@ function Grocery() {
   }, [allDone]);
 
   /**
-   * Ticks off what the receipt says was bought.
+   * Puts the whole receipt onto the list: ticking what was already on it, and
+   * adding what was not.
    *
-   * Only ticks: a line the receipt has and the list does not is left alone,
-   * because the till's name for it ("GV PNR 400G") is not one anybody would
-   * recognise later. Already-ticked rows are skipped rather than toggled, so
-   * scanning the same receipt twice is harmless.
+   * The scan used to tick only, and show the rest as a note. That left the
+   * shop record describing the list rather than the bill — buy eight things
+   * with one of them planned and the history remembered one. Everything on the
+   * receipt goes on the list now, so what is filed afterwards is the shop that
+   * actually happened.
    *
-   * The shop and the total are kept rather than written anywhere now — they
-   * fill the Done shopping dialog when it opens, which is where they belong.
+   * Added lines arrive ticked, because they are already in the bag. An
+   * unticked one would read as still to buy, and would never reach the record,
+   * which keeps only what was ticked.
+   *
+   * What stays untouched is the other direction: a list item the receipt does
+   * not mention is left unticked, still to buy.
+   *
+   * Added under the everyday name the model gave, not the till's: "GV PNR
+   * 400G" is an honest record and a useless thing to read on a list next week.
    */
-  const applyReceipt = (result: ScannedReceipt) => {
+  const applyReceipt = async (result: ScannedReceipt) => {
     const wanted = new Set(result.matched.map((n) => n.toLowerCase()));
     for (const row of rows) {
+      // Already-ticked rows are skipped rather than toggled, so scanning the
+      // same receipt twice does not untick what it ticked the first time.
       if (row.done || !wanted.has(row.name.toLowerCase())) continue;
       row.toggle();
     }
+
+    // Nothing already on the list, under either name. The model missing a
+    // match would otherwise put "Tomatoes" alongside the "Tomato" that is
+    // already there, and both would go into the record.
+    const onList = new Set(rows.map((r) => r.name.toLowerCase().trim()));
+    const added = await store.addBoughtItems(
+      result.extras
+        .filter(
+          (line) =>
+            !onList.has((line.cleanName || line.name).toLowerCase().trim()) &&
+            !onList.has(line.name.toLowerCase().trim()),
+        )
+        .map((line) => ({
+          name: line.cleanName || line.name,
+          qty: line.qty > 0 ? line.qty : 1,
+          unit: line.unit,
+          category: line.category,
+        })),
+    );
+
     if (result.store) setStore(result.store);
     if (result.total !== null) setTotal(String(result.total));
+    return added;
   };
 
   const finishShopping = async () => {

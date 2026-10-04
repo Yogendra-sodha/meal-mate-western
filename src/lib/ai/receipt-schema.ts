@@ -1,5 +1,9 @@
 import { z } from "zod";
 
+import { CATEGORIES, type Category } from "@/lib/types";
+
+const categoryIds = CATEGORIES.map((c) => c.id) as [Category, ...Category[]];
+
 /**
  * Ceiling on the image sent to the model, measured on the base64 payload.
  *
@@ -31,6 +35,17 @@ export const receiptLineSchema = z.object({
    * the model invented is dropped rather than trusted.
    */
   matches: z.string().max(120).default(""),
+  /**
+   * The product in plain words, for a line that has to go onto the list.
+   *
+   * The printed name is kept above because it is what the receipt says and is
+   * the honest record. It is useless as a list item though — nobody recognises
+   * "GV PNR 400G" a week later — so the model is asked for the everyday name
+   * as well, and that is what gets added.
+   */
+  cleanName: z.string().max(80).default(""),
+  /** which aisle it belongs under, so an added item files itself */
+  category: z.enum(categoryIds).default("pantry"),
   /** how many receipt lines were merged into this one */
   mergedFrom: z.number().int().min(1).default(1),
 });
@@ -101,6 +116,13 @@ function normaliseReceipt(raw: unknown, listNames: string[] = []): ParsedReceipt
             .toLowerCase()
             .trim(),
         ) ?? "",
+      // Falls back to the printed name: an added item with an odd name beats
+      // one with no name at all, which could not be shown or deleted.
+      cleanName:
+        String(line["cleanName"] ?? "")
+          .trim()
+          .slice(0, 80) || name,
+      category: asCategory(line["category"]),
       mergedFrom: 1,
     });
     if (lines.length >= 120) break;
@@ -162,6 +184,14 @@ function mergeDuplicates(lines: ReceiptLine[]): ReceiptLine[] {
  * unknown rather than as an invented amount. Clamping Infinity up to the
  * ceiling instead would put a thousand of something on the list.
  */
+/** Only an aisle the app actually has; anything else files under pantry. */
+function asCategory(value: unknown): Category {
+  const id = String(value ?? "")
+    .toLowerCase()
+    .trim();
+  return CATEGORIES.find((c) => c.id === id)?.id ?? "pantry";
+}
+
 function clamp(value: unknown, low: number, high: number): number {
   const n = typeof value === "number" ? value : Number(value);
   if (!Number.isFinite(n)) return low;

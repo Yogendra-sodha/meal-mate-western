@@ -115,6 +115,14 @@ interface StoreValue {
   updateRecipe: (id: string, patch: Partial<Recipe>) => void;
   resetRecipe: (id: string) => void;
   addToCart: (item: Omit<CartItem, "id" | "done" | "addedAt">) => void;
+  /**
+   * Adds things already bought — from a scanned receipt — ticked off.
+   *
+   * Ticked because they are in the bag: an unticked line would read as still
+   * to buy, and would never reach the shop record, which keeps only what was
+   * ticked. Returns how many were new.
+   */
+  addBoughtItems: (items: Omit<CartItem, "id" | "done" | "addedAt">[]) => Promise<number>;
   toggleCartItem: (id: string) => void;
   removeCartItem: (id: string) => void;
   clearCart: () => void;
@@ -1047,6 +1055,42 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             updated_at: new Date().toISOString(),
           })
           .then(() => load());
+      },
+      addBoughtItems: async (items) => {
+        if (!hid || !items.length) return 0;
+        // Anything already on the list is left to the ticking-off pass rather
+        // than added a second time under the till's name for it.
+        const known = new Set(state.cart.map((c) => c.name.toLowerCase().trim()));
+        const fresh = items.filter((i) => {
+          const key = i.name.toLowerCase().trim();
+          if (!key || known.has(key)) return false;
+          known.add(key);
+          return true;
+        });
+        if (!fresh.length) return 0;
+
+        const now = new Date().toISOString();
+        const { error } = await supabase.from("grocery_items").insert(
+          fresh.map((i) => ({
+            household_id: hid,
+            name: i.name,
+            qty: i.qty,
+            unit: i.unit,
+            category: i.category,
+            recipe_title: i.recipeTitle ?? null,
+            purchased: true,
+            created_by: uid,
+            updated_by: uid,
+            updated_at: now,
+          })),
+        );
+        if (error) {
+          console.error("[store] could not add the bought items:", error.message);
+          toast.error("Could not add what else was on the receipt");
+          return 0;
+        }
+        await load();
+        return fresh.length;
       },
       updateCartItem: (id, patch) => {
         update((d) => {

@@ -18,6 +18,7 @@ export type ScanRefusal =
   | "monthly_cap"
   | "bad_image"
   | "too_large"
+  | "model_busy"
   | "not_a_receipt"
   | "unreadable"
   | "invalid_output"
@@ -31,6 +32,8 @@ const inputSchema = z.object({
   /** the photo, base64 with no data: prefix */
   imageBase64: z.string(),
   mimeType: z.string(),
+  /** what is on the shopping list, so lines can be matched back to it */
+  listNames: z.array(z.string()).default([]),
 });
 
 /**
@@ -68,9 +71,9 @@ export const scanReceipt = createServerFn({ method: "POST" })
       .maybeSingle();
     const prefer = settings?.receipt_provider === "openai" ? "openai" : "gemini";
 
-    const { getImageProvider } = await import("@/lib/ai/provider.server");
-    const provider = getImageProvider(prefer);
-    if (!provider) return { ok: false, refusal: "not_configured" };
+    const { getImageProviders, isBusyError } = await import("@/lib/ai/provider.server");
+    const providers = getImageProviders(prefer);
+    if (!providers.length) return { ok: false, refusal: "not_configured" };
     const { data: claim, error: claimError } = await supabase.rpc("claim_ai_call");
     if (claimError) throw new Error(`Could not check the AI allowance: ${claimError.message}`);
 
@@ -107,22 +110,41 @@ export const scanReceipt = createServerFn({ method: "POST" })
         _source: "receipt",
       });
 
-    const { RECEIPT_SYSTEM_PROMPT } = await import("@/lib/ai/prompt.server");
+    const { buildReceiptPrompt } = await import("@/lib/ai/prompt.server");
+    const prompt = buildReceiptPrompt(data.listNames);
 
+    // "This model is currently experiencing high demand" is far and away the
+    // most common way a scan fails, and it is not a reason to give up: the
+    // other provider is configured and is almost never busy at the same
+    // moment. Only a busy refusal moves on — a bad key or a wrong model id
+    // would fail the same way twice, so those stop here.
     let completion;
-    try {
-      completion = await provider.completeFromImage(
-        RECEIPT_SYSTEM_PROMPT,
-        data.imageBase64,
-        data.mimeType,
-      );
-    } catch (error) {
+    let used = providers[0]!;
+    let lastError: unknown;
+    for (const candidate of providers) {
+      used = candidate;
+      try {
+        completion = await candidate.completeFromImage(prompt, data.imageBase64, data.mimeType);
+        lastError = undefined;
+        break;
+      } catch (error) {
+        lastError = error;
+        if (!isBusyError(error)) break;
+        console.warn(`[ai] ${candidate.model} was busy, trying the next provider`);
+      }
+    }
+
+    if (!completion) {
       // Still counted: a call that failed after reaching the provider may have
       // been billed, and an uncounted failure is a way to make free ones.
-      const { status, detail } = error as { status?: number; detail?: string };
-      await finish(status ? `provider_${status}` : "provider_error", provider.model, 0, 0);
-      console.error("[ai] receipt scan failed:", error);
-      return { ok: false, refusal: "provider_error", ...(detail ? { detail } : {}) };
+      const { status, detail } = lastError as { status?: number; detail?: string };
+      await finish(status ? `provider_${status}` : "provider_error", used.model, 0, 0);
+      console.error("[ai] receipt scan failed:", lastError);
+      return {
+        ok: false,
+        refusal: isBusyError(lastError) ? "model_busy" : "provider_error",
+        ...(detail ? { detail } : {}),
+      };
     }
 
     const record = (outcome: string) =>
@@ -145,7 +167,7 @@ export const scanReceipt = createServerFn({ method: "POST" })
       return { ok: false, refusal: "invalid_output" };
     }
 
-    const result = parseReceiptOutput(payload);
+    const result = parseReceiptOutput(payload, data.listNames);
     if (!result) {
       await record("bad_shape");
       console.error(

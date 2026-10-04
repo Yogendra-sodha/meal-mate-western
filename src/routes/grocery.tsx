@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import { PageHeader, Screen } from "@/components/app-shell";
 import { EditedBy } from "@/components/edited-by";
 import { PastShops } from "@/components/past-shops";
-import { ReceiptScanner } from "@/components/receipt-scanner";
+import { ReceiptScanner, type ScannedReceipt } from "@/components/receipt-scanner";
 import { SwipeToDelete } from "@/components/swipe-to-delete";
 import { Button } from "@/components/ui/button";
 import {
@@ -234,6 +234,27 @@ function Grocery() {
     setFinishOpen(true);
   }, [allDone]);
 
+  /**
+   * Ticks off what the receipt says was bought.
+   *
+   * Only ticks: a line the receipt has and the list does not is left alone,
+   * because the till's name for it ("GV PNR 400G") is not one anybody would
+   * recognise later. Already-ticked rows are skipped rather than toggled, so
+   * scanning the same receipt twice is harmless.
+   *
+   * The shop and the total are kept rather than written anywhere now — they
+   * fill the Done shopping dialog when it opens, which is where they belong.
+   */
+  const applyReceipt = (result: ScannedReceipt) => {
+    const wanted = new Set(result.matched.map((n) => n.toLowerCase()));
+    for (const row of rows) {
+      if (row.done || !wanted.has(row.name.toLowerCase())) continue;
+      row.toggle();
+    }
+    if (result.store) setStore(result.store);
+    if (result.total !== null) setTotal(String(result.total));
+  };
+
   const finishShopping = async () => {
     setFinishing(true);
     // Only what was actually ticked. Anything left unticked was not bought, so
@@ -347,6 +368,11 @@ function Grocery() {
             <RotateCcw className="mr-1 h-4 w-4" /> Reset
           </Button>
         </div>
+        {rows.length ? (
+          <div className="mt-2.5">
+            <ReceiptScanner listNames={rows.map((r) => r.name)} onScanned={applyReceipt} />
+          </div>
+        ) : null}
         {bought > 0 ? (
           <Button
             className="mt-2.5 h-10 w-full rounded-full"
@@ -543,14 +569,6 @@ function Grocery() {
                 />
               </div>
             </div>
-
-            <ReceiptScanner
-              listNames={rows.map((r) => r.name)}
-              onRead={({ store, total: read }) => {
-                if (store) setStore(store);
-                if (read !== null) setTotal(String(read));
-              }}
-            />
 
             <div className="flex gap-2">
               <Button

@@ -19,6 +19,20 @@ export const receiptLineSchema = z.object({
   unit: z.string().max(20),
   /** in the receipt's own currency, matching shopping_trips.total */
   price: z.number().min(0).max(100000),
+  /**
+   * The shopping-list item this line is, named exactly as the list names it,
+   * or "" for something that was not on the list.
+   *
+   * This one judgement is the model's, against a list handed to it with the
+   * photo, because it is the thing a model is genuinely better at than code:
+   * a till prints "TOM RED LB" and "GV PNR 400G" for what the list calls
+   * tomatoes and paneer, and no amount of substring matching gets there.
+   * Whatever comes back is checked against the list that was sent, so a name
+   * the model invented is dropped rather than trusted.
+   */
+  matches: z.string().max(120).default(""),
+  /** how many receipt lines were merged into this one */
+  mergedFrom: z.number().int().min(1).default(1),
 });
 
 export const parsedReceiptSchema = z.object({
@@ -58,9 +72,13 @@ const envelopeSchema = z.object({
  * costs another metered call. So every field is clamped into the shape above,
  * and only a reply with no usable line at all is refused.
  */
-function normaliseReceipt(raw: unknown): ParsedReceipt | null {
+function normaliseReceipt(raw: unknown, listNames: string[] = []): ParsedReceipt | null {
   if (!raw || typeof raw !== "object") return null;
   const r = raw as Record<string, unknown>;
+
+  // The list as it was sent, keyed for lookup. A match is only honoured when
+  // it names something that was actually on the list.
+  const byKey = new Map(listNames.map((n) => [n.toLowerCase().trim(), n]));
 
   const lines: ReceiptLine[] = [];
   for (const entry of Array.isArray(r["lines"]) ? r["lines"] : []) {
@@ -77,6 +95,13 @@ function normaliseReceipt(raw: unknown): ParsedReceipt | null {
         .trim()
         .slice(0, 20),
       price: clamp(line["price"], 0, 100000),
+      matches:
+        byKey.get(
+          String(line["matches"] ?? "")
+            .toLowerCase()
+            .trim(),
+        ) ?? "",
+      mergedFrom: 1,
     });
     if (lines.length >= 120) break;
   }
@@ -89,8 +114,44 @@ function normaliseReceipt(raw: unknown): ParsedReceipt | null {
     total,
     // A total of zero is not a total, whatever the model claimed.
     totalStated: r["totalStated"] === true && total > 0,
-    lines,
+    lines: mergeDuplicates(lines),
   };
+}
+
+/**
+ * Folds repeated purchases of one thing into a single line.
+ *
+ * A till prints a line per scan, so two bags of the same rice are two lines at
+ * the same price — correct on paper, and wrong in a list of what was bought.
+ * They are added together here: the quantities sum, the prices sum, and the
+ * line says how many it came from so the total still reconciles against the
+ * printed one.
+ *
+ * Lines the model matched to the same list item are merged on that, which
+ * catches a till that abbreviates the same product two different ways.
+ * Everything else merges on name and unit together, so 1 kg and 1 packet of
+ * the same thing stay apart — they are not the same purchase.
+ */
+function mergeDuplicates(lines: ReceiptLine[]): ReceiptLine[] {
+  const merged: ReceiptLine[] = [];
+  const seen = new Map<string, ReceiptLine>();
+
+  for (const line of lines) {
+    const key = line.matches
+      ? `match:${line.matches.toLowerCase()}`
+      : `name:${line.name.toLowerCase().trim()}|${line.unit.toLowerCase().trim()}`;
+    const existing = seen.get(key);
+    if (!existing) {
+      seen.set(key, line);
+      merged.push(line);
+      continue;
+    }
+    existing.qty = Math.min(existing.qty + line.qty, 1000);
+    existing.price = Math.min(existing.price + line.price, 100000);
+    existing.mergedFrom += 1;
+  }
+
+  return merged;
 }
 
 /**
@@ -107,8 +168,16 @@ function clamp(value: unknown, low: number, high: number): number {
   return Math.min(Math.max(n, low), high);
 }
 
-/** Validates and tidies a model reply, or null when it is not usable at all. */
-export function parseReceiptOutput(payload: unknown): ReceiptResult | null {
+/**
+ * Validates and tidies a model reply, or null when it is not usable at all.
+ *
+ * `listNames` is the shopping list that was sent with the photo; a match the
+ * reply claims is kept only when it names one of these.
+ */
+export function parseReceiptOutput(
+  payload: unknown,
+  listNames: string[] = [],
+): ReceiptResult | null {
   const envelope = envelopeSchema.safeParse(payload);
   if (!envelope.success) return null;
 
@@ -117,7 +186,7 @@ export function parseReceiptOutput(payload: unknown): ReceiptResult | null {
     return { ok: false, reason };
   }
 
-  const receipt = normaliseReceipt(envelope.data.receipt);
+  const receipt = normaliseReceipt(envelope.data.receipt, listNames);
   if (!receipt) return null;
 
   // Nothing readable on it. Reported as unreadable rather than as a success
@@ -140,17 +209,21 @@ export function parseReceiptOutput(payload: unknown): ReceiptResult | null {
 }
 
 /**
- * Receipt lines that do not match anything on the shopping list.
+ * Receipt lines that were not on the shopping list.
  *
- * Deliberately arithmetic rather than another question for the model: the list
- * is already in hand, so comparing is free and exact. Matching is on the name
- * alone, lowercased, both ways around — a till prints "TOMATO RED" for what the
- * list calls "tomatoes", and either can be the longer string.
+ * This used to compare names here rather than ask the model, on the grounds
+ * that the list was already in hand and comparing is free. That held while the
+ * answer was only shown to a person, who could see that "GV PNR 400G" was the
+ * paneer. It stopped holding once a match started ticking items off by itself,
+ * because substring matching on till abbreviations is wrong often enough to
+ * tick the wrong thing. The match now comes back with the line, checked
+ * against the list that was sent.
  */
-export function unmatchedLines(lines: ReceiptLine[], listNames: string[]): ReceiptLine[] {
-  const known = listNames.map((n) => n.toLowerCase().trim()).filter(Boolean);
-  return lines.filter((line) => {
-    const name = line.name.toLowerCase().trim();
-    return !known.some((k) => k === name || k.includes(name) || name.includes(k));
-  });
+export function unmatchedLines(lines: ReceiptLine[]): ReceiptLine[] {
+  return lines.filter((line) => !line.matches);
+}
+
+/** The list items this receipt accounts for, deduplicated. */
+export function matchedListNames(lines: ReceiptLine[]): string[] {
+  return [...new Set(lines.map((line) => line.matches).filter(Boolean))];
 }

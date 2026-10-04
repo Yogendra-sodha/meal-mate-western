@@ -26,6 +26,53 @@ export interface LlmProvider {
 const MAX_OUTPUT_TOKENS = 6000;
 
 /**
+ * How long one attempt gets before it is abandoned.
+ *
+ * The whole request has to finish inside the serverless function's budget, and
+ * a scan may try a second provider after the first turns one down. Capping
+ * each attempt is what makes room for the second: without it one hung call
+ * eats the entire budget and the fallback never runs.
+ */
+const ATTEMPT_TIMEOUT_MS = 20000;
+
+/**
+ * True when the provider turned the call down for load rather than refusing it.
+ *
+ * Both providers say this differently — 429 and 503, "overloaded",
+ * "high demand", UNAVAILABLE, RESOURCE_EXHAUSTED — and the difference matters:
+ * a busy model is worth asking somewhere else, while a bad key or a wrong
+ * model id would fail exactly the same way twice.
+ */
+export function isBusyError(error: unknown): boolean {
+  const { status, detail } = (error ?? {}) as { status?: number; detail?: string };
+  if (status === 429 || status === 503 || status === 529) return true;
+  if (status === 500 || status === 502 || status === 504) return true;
+  return /overload|high demand|unavailable|resource[_ ]exhausted|capacity|try again/i.test(
+    detail ?? "",
+  );
+}
+
+/** fetch with a deadline, so one slow provider cannot spend the whole budget. */
+async function fetchWithTimeout(url: string, init: RequestInit): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), ATTEMPT_TIMEOUT_MS);
+  try {
+    return await fetch(url, { ...init, signal: controller.signal });
+  } catch (error) {
+    // An abort reads as a busy provider: same cause, same remedy.
+    if ((error as { name?: string }).name === "AbortError") {
+      throw Object.assign(new Error("The model took too long to answer"), {
+        status: 504,
+        detail: "The model took too long to answer",
+      });
+    }
+    throw error;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/**
  * Any provider speaking the OpenAI chat-completions API.
  *
  * That covers OpenAI itself and most hosted Qwen, Llama and Mistral endpoints,
@@ -77,7 +124,7 @@ class OpenAiCompatibleProvider implements LlmProvider {
   }
 
   private post(system: string, user: string, tokenLimitKey: string) {
-    return fetch(`${this.baseUrl.replace(/\/$/, "")}/chat/completions`, {
+    return fetchWithTimeout(`${this.baseUrl.replace(/\/$/, "")}/chat/completions`, {
       method: "POST",
       headers: {
         "content-type": "application/json",
@@ -181,29 +228,32 @@ class GeminiVideoProvider implements VideoProvider {
 
   private post(system: string, youtubeUrl: string, lowResolution: boolean) {
     const base = process.env["GEMINI_BASE_URL"] ?? "https://generativelanguage.googleapis.com";
-    return fetch(`${base.replace(/\/$/, "")}/v1beta/models/${this.model}:generateContent`, {
-      method: "POST",
-      headers: { "content-type": "application/json", "x-goog-api-key": this.apiKey },
-      body: JSON.stringify({
-        systemInstruction: { parts: [{ text: system }] },
-        contents: [
-          {
-            role: "user",
-            parts: [
-              // No mimeType: a YouTube link is given as the uri alone, and a
-              // wildcard like "video/*" is not a mime type the API accepts.
-              { fileData: { fileUri: youtubeUrl } },
-              { text: "Convert this cooking video into the JSON object described above." },
-            ],
+    return fetchWithTimeout(
+      `${base.replace(/\/$/, "")}/v1beta/models/${this.model}:generateContent`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json", "x-goog-api-key": this.apiKey },
+        body: JSON.stringify({
+          systemInstruction: { parts: [{ text: system }] },
+          contents: [
+            {
+              role: "user",
+              parts: [
+                // No mimeType: a YouTube link is given as the uri alone, and a
+                // wildcard like "video/*" is not a mime type the API accepts.
+                { fileData: { fileUri: youtubeUrl } },
+                { text: "Convert this cooking video into the JSON object described above." },
+              ],
+            },
+          ],
+          generationConfig: {
+            responseMimeType: "application/json",
+            maxOutputTokens: MAX_OUTPUT_TOKENS,
+            ...(lowResolution ? { mediaResolution: "MEDIA_RESOLUTION_LOW" } : {}),
           },
-        ],
-        generationConfig: {
-          responseMimeType: "application/json",
-          maxOutputTokens: MAX_OUTPUT_TOKENS,
-          ...(lowResolution ? { mediaResolution: "MEDIA_RESOLUTION_LOW" } : {}),
-        },
-      }),
-    });
+        }),
+      },
+    );
   }
 }
 
@@ -247,7 +297,7 @@ class GeminiImageProvider implements ImageProvider {
     mimeType: string,
   ): Promise<CompletionResult> {
     const base = process.env["GEMINI_BASE_URL"] ?? "https://generativelanguage.googleapis.com";
-    const response = await fetch(
+    const response = await fetchWithTimeout(
       `${base.replace(/\/$/, "")}/v1beta/models/${this.model}:generateContent`,
       {
         method: "POST",
@@ -355,7 +405,7 @@ class OpenAiImageProvider implements ImageProvider {
   }
 
   private post(system: string, imageBase64: string, mimeType: string, tokenLimitKey: string) {
-    return fetch(`${this.baseUrl.replace(/\/$/, "")}/chat/completions`, {
+    return fetchWithTimeout(`${this.baseUrl.replace(/\/$/, "")}/chat/completions`, {
       method: "POST",
       headers: { "content-type": "application/json", authorization: `Bearer ${this.apiKey}` },
       body: JSON.stringify({
@@ -390,27 +440,40 @@ export type ImageProviderChoice = "gemini" | "openai";
  * household that has only one of them should get a working scanner rather than
  * "not set up" because a setting names the key they do not have.
  */
-export function getImageProvider(prefer: ImageProviderChoice = "gemini"): ImageProvider | null {
-  const geminiKey = process.env["GEMINI_API_KEY"];
-  const openAiKey = process.env["AI_API_KEY"] ?? process.env["OPENAI_API_KEY"];
+/**
+ * Both image providers, preferred one first.
+ *
+ * A busy model is the common failure by far — "experiencing high demand" comes
+ * back far more often than anything else — and waiting and asking the same one
+ * again mostly just spends the budget. Two keys are already configured, so the
+ * second attempt goes somewhere that is not busy instead.
+ */
+export function getImageProviders(prefer: ImageProviderChoice = "gemini"): ImageProvider[] {
+  const both =
+    prefer === "openai" ? (["openai", "gemini"] as const) : (["gemini", "openai"] as const);
+  const built = both.map((choice) => buildImageProvider(choice));
+  return built.filter((p): p is ImageProvider => p !== null);
+}
 
-  const gemini = () => {
-    if (!geminiKey) return null;
+function buildImageProvider(choice: ImageProviderChoice): ImageProvider | null {
+  if (choice === "gemini") {
+    const key = process.env["GEMINI_API_KEY"];
+    if (!key) return null;
     const model =
       process.env["GEMINI_IMAGE_MODEL"] ?? process.env["GEMINI_MODEL"] ?? "gemini-3.1-flash-lite";
-    return new GeminiImageProvider(geminiKey, model);
-  };
+    return new GeminiImageProvider(key, model);
+  }
+  const key = process.env["AI_API_KEY"] ?? process.env["OPENAI_API_KEY"];
+  if (!key) return null;
+  const baseUrl = process.env["AI_BASE_URL"] ?? "https://api.openai.com/v1";
+  // The text model unless a vision-specific one is named: on a multimodal
+  // model they are the same id, and where they are not this is the override.
+  const model = process.env["AI_VISION_MODEL"] ?? process.env["AI_MODEL"] ?? "gpt-5.6-luna";
+  return new OpenAiImageProvider(key, baseUrl, model);
+}
 
-  const openai = () => {
-    if (!openAiKey) return null;
-    const baseUrl = process.env["AI_BASE_URL"] ?? "https://api.openai.com/v1";
-    // The text model unless a vision-specific one is named: on a multimodal
-    // model they are the same id, and where they are not this is the override.
-    const model = process.env["AI_VISION_MODEL"] ?? process.env["AI_MODEL"] ?? "gpt-5.6-luna";
-    return new OpenAiImageProvider(openAiKey, baseUrl, model);
-  };
-
-  return prefer === "openai" ? (openai() ?? gemini()) : (gemini() ?? openai());
+export function getImageProvider(prefer: ImageProviderChoice = "gemini"): ImageProvider | null {
+  return getImageProviders(prefer)[0] ?? null;
 }
 
 /**

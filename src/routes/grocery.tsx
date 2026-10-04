@@ -400,11 +400,15 @@ function Grocery() {
             <RotateCcw className="mr-1 h-4 w-4" /> Reset
           </Button>
         </div>
-        {rows.length ? (
-          <div className="mt-2.5">
-            <ReceiptScanner listNames={rows.map((r) => r.name)} onScanned={applyReceipt} />
-          </div>
-        ) : null}
+        {/*
+          Always here, including on an empty list. A shop nobody planned is
+          exactly when scanning earns its keep: with nothing to tick off, every
+          line on the slip is added, and the week gets a record it would
+          otherwise never have had.
+        */}
+        <div className="mt-2.5">
+          <ReceiptScanner listNames={rows.map((r) => r.name)} onScanned={applyReceipt} />
+        </div>
         {bought > 0 ? (
           <Button
             className="mt-2.5 h-10 w-full rounded-full"

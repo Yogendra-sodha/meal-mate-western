@@ -14,6 +14,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import { AiUsagePanel } from "@/components/ai-usage-panel";
+import { SplitwisePanel } from "@/components/splitwise-panel";
 import { RentAdminPanel } from "@/components/rent-admin-panel";
 import { PageHeader, Screen } from "@/components/app-shell";
 import { vatIndexForDate } from "@/components/daily-vat";
@@ -71,7 +72,7 @@ interface Vat {
 
 function Admin() {
   const { isAdmin, loading } = useAuth();
-  const [tab, setTab] = useState<"households" | "vato" | "ai" | "rent">("households");
+  const [tab, setTab] = useState<"households" | "vato" | "ai" | "rent" | "splitwise">("households");
 
   if (loading) {
     return (
@@ -112,11 +113,15 @@ function Admin() {
         <TabChip active={tab === "rent"} onClick={() => setTab("rent")}>
           Rent
         </TabChip>
+        <TabChip active={tab === "splitwise"} onClick={() => setTab("splitwise")}>
+          Splitwise
+        </TabChip>
       </div>
       {tab === "households" ? <Households /> : null}
       {tab === "vato" ? <VatoManager /> : null}
       {tab === "ai" ? <AiUsagePanel /> : null}
       {tab === "rent" ? <RentAdminPanel /> : null}
+      {tab === "splitwise" ? <SplitwisePanel /> : null}
     </Screen>
   );
 }

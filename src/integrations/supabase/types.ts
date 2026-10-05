@@ -233,6 +233,8 @@ export type Database = {
           household_id: string
           id: string
           items: Json
+          splitwise_expense_id: number | null
+          splitwise_claimed_at: string | null
         }
         Insert: {
           store?: string | null
@@ -245,6 +247,8 @@ export type Database = {
           household_id: string
           id?: string
           items?: Json
+          splitwise_expense_id?: number | null
+          splitwise_claimed_at?: string | null
         }
         Update: {
           store?: string | null
@@ -257,6 +261,50 @@ export type Database = {
           household_id?: string
           id?: string
           items?: Json
+          splitwise_expense_id?: number | null
+          splitwise_claimed_at?: string | null
+        }
+        Relationships: []
+      }
+      splitwise_settings: {
+        Row: {
+          household_id: string
+          group_id: number | null
+          enabled: boolean
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          household_id: string
+          group_id?: number | null
+          enabled?: boolean
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          household_id?: string
+          group_id?: number | null
+          enabled?: boolean
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: []
+      }
+      splitwise_members: {
+        Row: {
+          household_id: string
+          user_id: string
+          splitwise_user_id: number
+        }
+        Insert: {
+          household_id: string
+          user_id: string
+          splitwise_user_id: number
+        }
+        Update: {
+          household_id?: string
+          user_id?: string
+          splitwise_user_id?: number
         }
         Relationships: []
       }
@@ -840,6 +888,9 @@ export type Database = {
     Functions: {
       admin_household_overview: { Args: Record<string, never>; Returns: Json }
       claim_ai_call: { Args: Record<string, never>; Returns: Json }
+      claim_splitwise_post: { Args: { _trip_id: string }; Returns: boolean }
+      record_splitwise_post: { Args: { _trip_id: string; _expense_id: number }; Returns: undefined }
+      release_splitwise_post: { Args: { _trip_id: string }; Returns: undefined }
       record_ai_call: {
         Args: {
           _usage_id: string

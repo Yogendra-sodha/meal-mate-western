@@ -1,6 +1,7 @@
 import { ChevronRight } from "lucide-react";
 import { useMemo, useState } from "react";
 
+import { SendToSplitwise } from "@/components/send-to-splitwise";
 import { formatQty, weekRangeLabel } from "@/lib/planning";
 import type { ShoppingTrip } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -157,19 +158,22 @@ export function PastShops({
                         </button>
 
                         {tripOpen ? (
-                          <ul className="pb-2 pl-16 pr-4">
-                            {trip.items.map((item, i) => (
-                              <li
-                                key={`${item.name}-${i}`}
-                                className="grid grid-cols-[minmax(0,1fr)_auto] gap-3 py-1 text-sm"
-                              >
-                                <span className="min-w-0 truncate">{item.name}</span>
-                                <span className="shrink-0 font-semibold text-primary">
-                                  {formatQty(item.qty, item.unit)}
-                                </span>
-                              </li>
-                            ))}
-                          </ul>
+                          <div className="pb-3 pl-16 pr-4">
+                            <ul>
+                              {trip.items.map((item, i) => (
+                                <li
+                                  key={`${item.name}-${i}`}
+                                  className="grid grid-cols-[minmax(0,1fr)_auto] gap-3 py-1 text-sm"
+                                >
+                                  <span className="min-w-0 truncate">{item.name}</span>
+                                  <span className="shrink-0 font-semibold text-primary">
+                                    {formatQty(item.qty, item.unit)}
+                                  </span>
+                                </li>
+                              ))}
+                            </ul>
+                            <SendToSplitwise trip={trip} />
+                          </div>
                         ) : null}
                       </li>
                     );

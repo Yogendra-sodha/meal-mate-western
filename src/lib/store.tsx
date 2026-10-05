@@ -227,7 +227,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       // history would otherwise ride along on every load.
       supabase
         .from("shopping_trips")
-        .select("id, done_on, covers_week, items, skipped, store, total")
+        .select("id, done_on, covers_week, items, skipped, store, total, splitwise_expense_id")
         .eq("household_id", householdId)
         .order("done_on", { ascending: false })
         .limit(12),
@@ -321,6 +321,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         id: t.id,
         doneOn: t.done_on,
         coversWeek: t.covers_week ?? t.done_on,
+        ...(t.splitwise_expense_id ? { splitwiseExpenseId: Number(t.splitwise_expense_id) } : {}),
         skipped: (t.skipped ?? []) as string[],
         ...(t.store ? { store: t.store } : {}),
         ...(t.total !== null && t.total !== undefined ? { total: Number(t.total) } : {}),

@@ -227,12 +227,43 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       // history would otherwise ride along on every load.
       supabase
         .from("shopping_trips")
-        .select("id, done_on, covers_week, items, skipped, store, total, splitwise_expense_id")
+        .select("id, done_on, covers_week, items, skipped, store, total")
         .eq("household_id", householdId)
         .order("done_on", { ascending: false })
         .limit(12),
       supabase.from("recipe_archive").select("recipe_ref").eq("household_id", householdId),
     ]);
+
+    // A query that fails returns an error rather than throwing, and every read
+    // below falls back to an empty list. That combination once emptied the shop
+    // history on screen without a word, because one column in one select did
+    // not exist yet. Nothing is silent now.
+    const failures: string[] = [];
+    for (const [table, res] of [
+      ["recipes", recipesRes],
+      ["recipe_ingredients", ingredientsRes],
+      ["meal_plans", plansRes],
+      ["meal_plan_items", planItemsRes],
+      ["grocery_items", groceryRes],
+      ["pantry_items", pantryRes],
+      ["cooking_tasks", tasksRes],
+      ["recipe_favorites", favRes],
+      ["recipe_ratings", ratingRes],
+      ["grocery_checks", checksRes],
+      ["cook_log", logRes],
+      ["shopping_trips", tripsRes],
+      ["recipe_archive", archiveRes],
+    ] as [string, { error: { message: string } | null }][]) {
+      if (!res.error) continue;
+      failures.push(table);
+      console.error(`[store] could not read ${table}:`, res.error.message);
+    }
+    if (failures.length) {
+      toast.error(`Could not load: ${failures.join(", ")}. A migration may not have been run.`, {
+        id: "load-failed",
+        duration: 10000,
+      });
+    }
 
     const ingByRecipe = new Map<string, Recipe["ingredients"]>();
     for (const i of ingredientsRes.data ?? []) {
@@ -321,7 +352,6 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         id: t.id,
         doneOn: t.done_on,
         coversWeek: t.covers_week ?? t.done_on,
-        ...(t.splitwise_expense_id ? { splitwiseExpenseId: Number(t.splitwise_expense_id) } : {}),
         skipped: (t.skipped ?? []) as string[],
         ...(t.store ? { store: t.store } : {}),
         ...(t.total !== null && t.total !== undefined ? { total: Number(t.total) } : {}),

@@ -131,8 +131,6 @@ export interface ShoppingTrip {
   store?: string | undefined;
   /** optional: what the shop came to */
   total?: number | undefined;
-  /** the Splitwise expense this shop became, once it has been sent */
-  splitwiseExpenseId?: number | undefined;
   items: { name: string; qty: number; unit: string; category: Category }[];
 }
 

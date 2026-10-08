@@ -6,7 +6,6 @@ import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
 import { pushTripToSplitwise, type SplitwiseRefusal } from "@/lib/splitwise/functions";
-import { useStore } from "@/lib/store";
 import type { ShoppingTrip } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -33,8 +32,8 @@ const MESSAGES: Record<SplitwiseRefusal, string> = {
  */
 export function SendToSplitwise({ trip }: { trip: ShoppingTrip }) {
   const { members } = useAuth();
-  const { reload } = useStore();
   const [ready, setReady] = useState(false);
+  const [sent, setSent] = useState(false);
   const [mapped, setMapped] = useState<string[]>([]);
   const [picked, setPicked] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
@@ -43,24 +42,38 @@ export function SendToSplitwise({ trip }: { trip: ShoppingTrip }) {
   useEffect(() => {
     let alive = true;
     void (async () => {
-      const [{ data: settings }, { data: rows }] = await Promise.all([
+      // Read here rather than with the shop itself, so that a deployment whose
+      // Splitwise migration has not been run yet simply shows no Splitwise —
+      // instead of one missing column emptying the whole shop history.
+      const [{ data: settings, error }, { data: rows }, { data: tripRow }] = await Promise.all([
         supabase.from("splitwise_settings").select("enabled, group_id").limit(1).maybeSingle(),
         supabase.from("splitwise_members").select("user_id"),
+        supabase
+          .from("shopping_trips")
+          .select("splitwise_expense_id")
+          .eq("id", trip.id)
+          .maybeSingle(),
       ]);
       if (!alive) return;
+      if (error) {
+        // No Splitwise tables: not set up on this deployment, nothing to show.
+        setReady(false);
+        return;
+      }
       const ids = (rows ?? []).map((r) => r.user_id);
       setMapped(ids);
       // Everyone who can be included starts included: the whole house is the
       // common case, and dropping two people is quicker than picking eight.
       setPicked(ids);
+      setSent(Boolean(tripRow?.splitwise_expense_id));
       setReady(Boolean(settings?.enabled && settings.group_id) && ids.length > 0);
     })();
     return () => {
       alive = false;
     };
-  }, []);
+  }, [trip.id]);
 
-  if (trip.splitwiseExpenseId) {
+  if (sent) {
     return (
       <p className="mt-2 flex items-center gap-1.5 text-xs font-semibold text-muted-foreground">
         <Check className="h-3.5 w-3.5" /> On Splitwise
@@ -82,11 +95,11 @@ export function SendToSplitwise({ trip }: { trip: ShoppingTrip }) {
         const base = MESSAGES[result.refusal] ?? "Could not send that.";
         toast.error(result.detail ? `${base} (${result.detail})` : base, { duration: 8000 });
         // Another phone may have sent it while this one was looking at it.
-        if (result.refusal === "already_sent") await reload();
+        if (result.refusal === "already_sent") setSent(true);
         return;
       }
       toast.success(`Split between ${result.people} — ${result.owedEach} each`);
-      await reload();
+      setSent(true);
     } finally {
       setBusy(false);
     }

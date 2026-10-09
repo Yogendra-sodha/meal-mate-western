@@ -57,25 +57,29 @@ function Grocery() {
   const store = useStore();
   const { state, recipesById } = store;
 
-  const anchor = new Date();
-  anchor.setDate(anchor.getDate() + week * 7);
-  const dates = weekDates(anchor).map(toISODate);
+  // Held steady across renders rather than rebuilt each time: everything below
+  // is derived from these dates, and a fresh array every render makes each of
+  // those a dependency that always looks changed.
+  const dates = useMemo(() => {
+    const anchor = new Date();
+    anchor.setDate(anchor.getDate() + week * 7);
+    return weekDates(anchor).map(toISODate);
+  }, [week]);
 
   // Every dish planned this week, so an item added on Monday can still be
   // tagged to Saturday's dish.
   const weekDishes = useMemo(() => {
     const titles = new Set<string>();
-    for (const iso of weekDates(anchor).map(toISODate)) {
+    for (const iso of dates) {
       for (const id of state.plan[iso]?.recipeIds ?? []) {
         const title = recipesById[id]?.title;
         if (title) titles.add(title);
       }
     }
     return [...titles].sort((a, b) => a.localeCompare(b));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [week, state.plan, recipesById]);
+  }, [dates, state.plan, recipesById]);
 
-  const weekStart = toISODate(weekDates(anchor)[0]!);
+  const weekStart = dates[0]!;
 
   /**
    * Shops already done for this week. Their items are matched by name alone,
@@ -99,10 +103,51 @@ function Grocery() {
     [state.trips, weekStart],
   );
 
-  const lines = useMemo(
-    () => buildGroceryList(dates, state, recipesById),
-    [dates.join(","), state, recipesById],
+  /**
+   * The days still to cook, which is what there is left to shop for.
+   *
+   * Yesterday's dinner has happened — with these ingredients or without them —
+   * so its ingredients are not shopping any more. Leaving them on meant the
+   * list quietly asked you to buy for meals already eaten, and grew all week.
+   *
+   * Only for the week you are in. An older week is a record and should still
+   * read as it did, and a later one has no days gone by to drop.
+   */
+  const today = toISODate(new Date());
+  const upcoming = useMemo(
+    () => (week === 0 ? dates.filter((iso) => iso >= today) : dates),
+    [dates, week, today],
   );
+
+  // Off by default, because the point is not to see them. The count below is
+  // what keeps this from being a disappearance.
+  const [showPast, setShowPast] = useState(false);
+  const activeDates = showPast ? dates : upcoming;
+
+  const lines = useMemo(
+    () => buildGroceryList(activeDates, state, recipesById),
+    [activeDates, state, recipesById],
+  );
+
+  /**
+   * How many lines belong only to days that have gone.
+   *
+   * Counted rather than inferred from the difference in quantity: an onion
+   * wanted by both Sunday and Thursday is still wanted, just less of it, and
+   * saying it was dropped would be wrong.
+   */
+  const pastOnlyCount = useMemo(() => {
+    if (showPast || upcoming.length === dates.length) return 0;
+    const everything = buildGroceryList(dates, state, recipesById);
+    const stillWanted = new Set(lines.map((l) => l.key));
+    return everything.filter(
+      (l) =>
+        l.needed > 0 &&
+        !stillWanted.has(l.key) &&
+        !state.dismissed[l.key] &&
+        !handledThisWeek.has(l.name.toLowerCase()),
+    ).length;
+  }, [showPast, upcoming, dates, state, recipesById, lines, handledThisWeek]);
 
   /**
    * One row shape for both kinds of item, so the list renders and behaves
@@ -449,6 +494,24 @@ function Grocery() {
             }}
           >
             Undo
+          </Button>
+        </div>
+      ) : null}
+
+      {pastOnlyCount > 0 || showPast ? (
+        <div className="mb-4 flex items-center justify-between gap-3 rounded-2xl bg-surface-2 px-4 py-2.5">
+          <p className="min-w-0 text-sm text-muted-foreground">
+            {showPast
+              ? "Showing days that have already gone."
+              : `${pastOnlyCount} ${pastOnlyCount === 1 ? "item was" : "items were"} only for days that have gone.`}
+          </p>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="shrink-0 rounded-full"
+            onClick={() => setShowPast((v) => !v)}
+          >
+            {showPast ? "Hide" : "Show"}
           </Button>
         </div>
       ) : null}

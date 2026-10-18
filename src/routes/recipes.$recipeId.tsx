@@ -11,7 +11,7 @@ import {
   Trash2,
   Youtube,
 } from "lucide-react";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import { Screen } from "@/components/app-shell";
@@ -38,6 +38,7 @@ import {
 } from "@/lib/planning";
 import { useStore } from "@/lib/store";
 import { CATEGORIES } from "@/lib/types";
+import { readStep, splitSteps } from "@/lib/steps";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/recipes/$recipeId")({
@@ -367,11 +368,16 @@ function RecipeDetail() {
   );
 }
 
+/**
+ * Steps as a cook reads them: one action a line, with the action and any
+ * time or heat setting picked out so the eye finds them without reading.
+ */
 function StepList({ steps }: { steps: string[] }) {
   const [done, setDone] = useState<number[]>([]);
+  const lines = useMemo(() => splitSteps(steps), [steps]);
   return (
     <ol className="space-y-2">
-      {steps.map((step, i) => {
+      {lines.map((step, i) => {
         const checked = done.includes(i);
         return (
           <li key={step}>
@@ -387,7 +393,21 @@ function StepList({ steps }: { steps: string[] }) {
                 {i + 1}
               </span>
               <span className={cn("min-w-0 flex-1 text-sm", checked && "line-through opacity-70")}>
-                {step}
+                {readStep(step).map((piece, p) =>
+                  piece.kind === "plain" ? (
+                    <span key={p}>{piece.text}</span>
+                  ) : (
+                    <span
+                      key={p}
+                      className={cn(
+                        "font-bold",
+                        piece.kind === "cue" && !checked && "text-primary",
+                      )}
+                    >
+                      {piece.text}
+                    </span>
+                  ),
+                )}
               </span>
             </button>
           </li>

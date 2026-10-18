@@ -32,8 +32,25 @@ const MAX_OUTPUT_TOKENS = 6000;
  * a scan may try a second provider after the first turns one down. Capping
  * each attempt is what makes room for the second: without it one hung call
  * eats the entire budget and the fallback never runs.
+ *
+ * This is the figure for reading text or a photograph, where an answer in
+ * twenty seconds is a slow one.
  */
 const ATTEMPT_TIMEOUT_MS = 20000;
+
+/**
+ * The same, for watching a video, which is a different kind of wait.
+ *
+ * A model asked to watch a ten-minute cooking video and write down the recipe
+ * routinely takes a minute or more — it is transcribing speech and reading
+ * on-screen cards, not answering a prompt. Twenty seconds was never a slow
+ * answer here, it was a guaranteed one, and every video import died at it.
+ *
+ * Deliberately longer than the platform will allow a request to run, so the
+ * deadline that actually applies is the platform's. There is no second
+ * provider to leave room for: only one model watches videos.
+ */
+const VIDEO_TIMEOUT_MS = 240000;
 
 /**
  * True when the provider turned the call down for load rather than refusing it.
@@ -53,9 +70,13 @@ export function isBusyError(error: unknown): boolean {
 }
 
 /** fetch with a deadline, so one slow provider cannot spend the whole budget. */
-async function fetchWithTimeout(url: string, init: RequestInit): Promise<Response> {
+async function fetchWithTimeout(
+  url: string,
+  init: RequestInit,
+  timeoutMs: number = ATTEMPT_TIMEOUT_MS,
+): Promise<Response> {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), ATTEMPT_TIMEOUT_MS);
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
     return await fetch(url, { ...init, signal: controller.signal });
   } catch (error) {
@@ -253,6 +274,7 @@ class GeminiVideoProvider implements VideoProvider {
           },
         }),
       },
+      VIDEO_TIMEOUT_MS,
     );
   }
 }

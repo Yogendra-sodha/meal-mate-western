@@ -107,6 +107,8 @@ export type Database = {
           household_id: string
           period: string
           is_open: boolean
+          open_mode: string
+          time_zone: string
           window_start: string
           window_end: string
           created_by: string | null
@@ -117,6 +119,8 @@ export type Database = {
           household_id: string
           period: string
           is_open?: boolean
+          open_mode?: string
+          time_zone?: string
           window_start: string
           window_end: string
           created_by?: string | null
@@ -127,6 +131,8 @@ export type Database = {
           household_id?: string
           period?: string
           is_open?: boolean
+          open_mode?: string
+          time_zone?: string
           window_start?: string
           window_end?: string
           created_by?: string | null
@@ -149,6 +155,10 @@ export type Database = {
           paid: boolean
           paid_at: string | null
           approved_by: string | null
+          change_notes: Json
+          change_from_pocket: boolean
+          covers: string[]
+          paid_by: string | null
           updated_at: string
         }
         Insert: {
@@ -165,6 +175,10 @@ export type Database = {
           paid?: boolean
           paid_at?: string | null
           approved_by?: string | null
+          change_notes?: Json
+          change_from_pocket?: boolean
+          covers?: string[]
+          paid_by?: string | null
           updated_at?: string
         }
         Update: {
@@ -181,6 +195,10 @@ export type Database = {
           paid?: boolean
           paid_at?: string | null
           approved_by?: string | null
+          change_notes?: Json
+          change_from_pocket?: boolean
+          covers?: string[]
+          paid_by?: string | null
           updated_at?: string
         }
         Relationships: []
@@ -904,10 +922,17 @@ export type Database = {
       }
       is_app_admin: { Args: Record<string, never>; Returns: boolean }
       rent_board: { Args: Record<string, never>; Returns: Json }
-      declare_rent_notes: { Args: { _notes: Json }; Returns: Json }
+      declare_rent_notes: { Args: { _notes: Json; _covers?: string[] }; Returns: Json }
       record_rent_payment: {
-        Args: { _due_id: string; _notes: Json; _paid: boolean }
-        Returns: undefined
+        Args: {
+          _due_id: string
+          _notes: Json
+          _paid: boolean
+          _change?: Json
+          _change_from_pocket?: boolean
+          _covers?: string[]
+        }
+        Returns: Json
       }
       is_household_member: { Args: { _household_id: string }; Returns: boolean }
       join_household_by_code: { Args: { _code: string }; Returns: string }

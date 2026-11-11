@@ -1,5 +1,5 @@
 import { Check } from "lucide-react";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -31,6 +31,7 @@ export function NoteCounterDialog({
   confirmLabel = "Save",
   onClose,
   onConfirm,
+  children,
 }: {
   title: string;
   description: string;
@@ -42,6 +43,8 @@ export function NoteCounterDialog({
   confirmLabel?: string;
   onClose: () => void;
   onConfirm: (notes: NoteCounts) => void;
+  /** anything that belongs above the notes, such as who else is being paid for */
+  children?: ReactNode;
 }) {
   const [notes, setNotes] = useState<NoteCounts>(initialNotes ?? {});
   const total = countedCents(notes);
@@ -56,37 +59,9 @@ export function NoteCounterDialog({
           <DialogDescription>{description}</DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-2">
-          {DENOMINATIONS.map((note) => {
-            const count = notes[String(note)] ?? 0;
-            return (
-              <div
-                key={note}
-                className="grid grid-cols-[4rem_minmax(0,1fr)_5rem] items-center gap-3"
-              >
-                <span className="text-sm font-bold">${note}</span>
-                <Input
-                  type="number"
-                  inputMode="numeric"
-                  min="0"
-                  step="1"
-                  value={count === 0 ? "" : count}
-                  placeholder="0"
-                  aria-label={`Number of $${note} notes`}
-                  onChange={(e) =>
-                    setNotes((n) => ({
-                      ...n,
-                      [String(note)]: Math.max(Math.floor(Number(e.target.value)) || 0, 0),
-                    }))
-                  }
-                />
-                <span className="text-right text-sm font-semibold text-muted-foreground">
-                  {count > 0 ? money(count * note * 100) : "—"}
-                </span>
-              </div>
-            );
-          })}
-        </div>
+        {children}
+
+        <NoteGrid notes={notes} onChange={setNotes} />
 
         <div className="rounded-2xl bg-surface-2 p-3">
           <div className="flex items-center justify-between">
@@ -125,5 +100,53 @@ export function NoteCounterDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+/**
+ * One row per denomination, with what each row comes to.
+ *
+ * Its own component because a handover can need two piles counted — what came
+ * in and what went back as change — and both should be counted the same way.
+ */
+export function NoteGrid({
+  notes,
+  onChange,
+  label = "notes",
+}: {
+  notes: NoteCounts;
+  onChange: (next: NoteCounts) => void;
+  /** read out by screen readers: "Number of $20 notes given back" */
+  label?: string;
+}) {
+  return (
+    <div className="space-y-2">
+      {DENOMINATIONS.map((note) => {
+        const count = notes[String(note)] ?? 0;
+        return (
+          <div key={note} className="grid grid-cols-[4rem_minmax(0,1fr)_5rem] items-center gap-3">
+            <span className="text-sm font-bold">${note}</span>
+            <Input
+              type="number"
+              inputMode="numeric"
+              min="0"
+              step="1"
+              value={count === 0 ? "" : count}
+              placeholder="0"
+              aria-label={`Number of $${note} ${label}`}
+              onChange={(e) =>
+                onChange({
+                  ...notes,
+                  [String(note)]: Math.max(Math.floor(Number(e.target.value)) || 0, 0),
+                })
+              }
+            />
+            <span className="text-right text-sm font-semibold text-muted-foreground">
+              {count > 0 ? money(count * note * 100) : "—"}
+            </span>
+          </div>
+        );
+      })}
+    </div>
   );
 }

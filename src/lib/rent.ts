@@ -69,16 +69,128 @@ export const money = (cents: number) =>
   });
 
 /**
- * Adds up several piles of notes into one.
+ * Adds up several piles of notes into one, less any that went back out.
  *
  * What the collector ends up holding is not a total in dollars but a stack of
  * each kind, and that is what gets checked against the cash box or handed to a
  * bank. Every denomination is returned, zeroes included, so the tally reads in
  * the same order every month rather than changing shape with what came in.
+ *
+ * `takenOut` is change handed back from the pile. Leaving it in was what made
+ * the tally claim notes that had already gone back across the table. A count
+ * can come out below zero only if more change was recorded as coming from the
+ * pile than ever went into it — which means some of it really came from a
+ * wallet — so it is reported as it is rather than hidden.
  */
-export function tallyNotes(piles: NoteCounts[]): { note: number; count: number; cents: number }[] {
+export function tallyNotes(
+  piles: NoteCounts[],
+  takenOut: NoteCounts[] = [],
+): { note: number; count: number; cents: number }[] {
   return DENOMINATIONS.map((note) => {
-    const count = piles.reduce((n, pile) => n + Math.max(pile[String(note)] ?? 0, 0), 0);
+    const sum = (list: NoteCounts[]) =>
+      list.reduce((n, pile) => n + Math.max(pile[String(note)] ?? 0, 0), 0);
+    const count = sum(piles) - sum(takenOut);
     return { note, count, cents: count * note * 100 };
   });
+}
+
+/** Today in the browser's own calendar, yyyy-mm-dd. */
+export function localToday(): string {
+  return iso(new Date());
+}
+
+/** The browser's time zone, stored with a month so the database closes it at the right midnight. */
+export function localTimeZone(): string {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+  } catch {
+    return "UTC";
+  }
+}
+
+export type OpenMode = "auto" | "open" | "closed";
+
+/**
+ * Whether a month's collection is open, and how to say why.
+ *
+ * Mirrors rent_window_open in the database, which is what actually enforces
+ * it; this copy is only for saying so on screen.
+ */
+export function windowState(
+  mode: OpenMode,
+  start: string,
+  end: string,
+  today: string = localToday(),
+): { open: boolean; headline: string; detail: string } {
+  const day = (d: string) =>
+    new Date(`${d}T00:00:00`).toLocaleDateString(undefined, { day: "numeric", month: "short" });
+  if (mode === "open") {
+    return {
+      open: true,
+      headline: "Open — held open by you",
+      detail: "Ignoring the dates until you set it back to follow them.",
+    };
+  }
+  if (mode === "closed") {
+    return {
+      open: false,
+      headline: "Closed — held shut by you",
+      detail: "Ignoring the dates until you set it back to follow them.",
+    };
+  }
+  if (today < start) {
+    return {
+      open: false,
+      headline: `Opens by itself on ${day(start)}`,
+      detail: `And closes by itself after ${day(end)}.`,
+    };
+  }
+  if (today > end) {
+    return {
+      open: false,
+      headline: `Closed — the window ended ${day(end)}`,
+      detail: "Choose Open now to let a late payer enter their notes.",
+    };
+  }
+  return {
+    open: true,
+    headline: "Collection is open",
+    detail: `Closes by itself after ${day(end)}.`,
+  };
+}
+
+/**
+ * Whether a handover settles what is owed.
+ *
+ * Handed over, less change given back, has to come to exactly what is owed —
+ * by the payer and anyone they are covering. Short and over are both reasons
+ * not to accept: over is either change that has not been recorded or a
+ * miscount, and in neither case is it rent.
+ */
+export function settle({
+  handedCents,
+  changeCents,
+  owedCents,
+}: {
+  handedCents: number;
+  changeCents: number;
+  owedCents: number;
+}): {
+  netCents: number;
+  status: "exact" | "short" | "over" | "change_too_big";
+  /** how much change is still to be handed back, when over */
+  changeStillOwedCents: number;
+  shortCents: number;
+} {
+  const netCents = handedCents - changeCents;
+  if (changeCents > handedCents) {
+    return { netCents, status: "change_too_big", changeStillOwedCents: 0, shortCents: 0 };
+  }
+  if (netCents < owedCents) {
+    return { netCents, status: "short", changeStillOwedCents: 0, shortCents: owedCents - netCents };
+  }
+  if (netCents > owedCents) {
+    return { netCents, status: "over", changeStillOwedCents: netCents - owedCents, shortCents: 0 };
+  }
+  return { netCents, status: "exact", changeStillOwedCents: 0, shortCents: 0 };
 }

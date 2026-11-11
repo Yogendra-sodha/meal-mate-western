@@ -7,11 +7,12 @@ import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
 import { money, type NoteCounts, windowLabel } from "@/lib/rent";
+import { cn } from "@/lib/utils";
 
 interface Board {
   cycle_id: string;
   period: string;
-  /** the collector's switch — the only thing that opens collection */
+  /** open right now — by the window's dates, or by the collector holding it open */
   is_open: boolean;
   window_start: string;
   window_end: string;
@@ -25,6 +26,10 @@ interface MyDue {
   declared_notes: NoteCounts;
   declared_cents: number;
   paid: boolean;
+  /** whose rent they said they are also paying */
+  covers?: string[];
+  /** set when someone else paid this row */
+  paid_by?: string | null;
 }
 
 /**
@@ -40,15 +45,19 @@ interface MyDue {
  * Entering notes is a claim, not a payment. The tick comes when the cash is
  * actually handed over and accepted.
  *
- * Nothing here appears on a schedule. It shows while the collector has the
- * window switched on, and vanishes when they switch it off — the dates it
- * displays are what the switch is announcing, not what decides it.
+ * It shows while collection is open — from the window's first day to its
+ * last, by itself, unless the collector is holding it open or shut.
+ *
+ * Someone handing over another person's rent too says so here, by name only.
+ * They are never shown what anyone else owes; the collector checks the total.
  */
 export function RentStrip() {
-  const { user } = useAuth();
+  const { user, members } = useAuth();
   const [board, setBoard] = useState<Board | null>(null);
   const [mine, setMine] = useState<MyDue | null>(null);
   const [counting, setCounting] = useState(false);
+  const [covers, setCovers] = useState<string[]>([]);
+  const nameOf = (id: string) => members.find((m) => m.user_id === id)?.name ?? "someone";
 
   const load = useCallback(async () => {
     const { data } = await supabase.rpc("rent_board");
@@ -62,13 +71,16 @@ export function RentStrip() {
     // row to find, but the collector is an admin and can read every row in the
     // cycle — without this the query returns all of them, maybeSingle errors,
     // and the collector is the one person who cannot enter their own rent.
+    // * rather than named columns, so a column the database does not have yet
+    // is simply missing instead of failing the query and hiding the row.
     const { data: due } = await supabase
       .from("rent_dues")
-      .select("amount_due_cents, amount_paid_cents, declared_notes, declared_cents, paid")
+      .select("*")
       .eq("cycle_id", next.cycle_id)
       .eq("user_id", user.id)
       .maybeSingle();
     setMine((due as MyDue | null) ?? null);
+    setCovers((due as MyDue | null)?.covers ?? []);
   }, [user]);
 
   useEffect(() => {
@@ -76,7 +88,12 @@ export function RentStrip() {
   }, [load]);
 
   const declare = async (notes: NoteCounts) => {
-    const { data, error } = await supabase.rpc("declare_rent_notes", { _notes: notes });
+    // Covers sent only when there are some, so an ordinary declaration still
+    // works on a database that has not had the update yet.
+    const { data, error } = await supabase.rpc(
+      "declare_rent_notes",
+      covers.length ? { _notes: notes, _covers: covers } : { _notes: notes },
+    );
     setCounting(false);
     const result = data as { ok: boolean; reason?: string; declared_cents?: number } | null;
     if (error || !result?.ok) {
@@ -85,12 +102,20 @@ export function RentStrip() {
           ? "Yogi has already accepted this — ask him to change it"
           : result?.reason === "window_closed"
             ? "Rent collection is closed right now"
-            : "Could not save that",
+            : result?.reason === "not_on_rent"
+              ? "Someone you ticked is not on this month's rent"
+              : covers.length && error
+                ? "Paying for someone else needs an app update on Yogi's side — tell him"
+                : "Could not save that",
       );
       return;
     }
     await load();
-    toast.success(`Noted ${money(result.declared_cents ?? 0)} — hand it to Yogi to be accepted`);
+    toast.success(
+      covers.length
+        ? `Noted ${money(result.declared_cents ?? 0)} for you and ${covers.map(nameOf).join(", ")} — hand it to Yogi`
+        : `Noted ${money(result.declared_cents ?? 0)} — hand it to Yogi to be accepted`,
+    );
   };
 
   // The switch is the whole gate: closed means there is nothing to show.
@@ -114,14 +139,22 @@ export function RentStrip() {
         <div className="flex items-center justify-between gap-3 bg-surface-2 px-4 py-3">
           {mine.paid ? (
             <p className="flex items-center gap-1.5 text-sm font-bold text-primary">
-              <Check className="h-4 w-4" /> Your rent is accepted · {money(mine.amount_paid_cents)}
+              <Check className="h-4 w-4" />
+              {mine.paid_by
+                ? `Your rent is paid · by ${nameOf(mine.paid_by)}`
+                : `Your rent is accepted · ${money(mine.amount_paid_cents)}`}
             </p>
           ) : (
             <>
               <p className="min-w-0 text-sm">
                 <span className="font-bold">You owe {money(mine.amount_due_cents)}</span>
                 {mine.declared_cents > 0 ? (
-                  mine.declared_cents < mine.amount_due_cents ? (
+                  (mine.covers?.length ?? 0) > 0 ? (
+                    <span className="block text-xs text-muted-foreground">
+                      You entered {money(mine.declared_cents)} for you and{" "}
+                      {(mine.covers ?? []).map(nameOf).join(", ")} — waiting to be accepted
+                    </span>
+                  ) : mine.declared_cents < mine.amount_due_cents ? (
                     <span className="block text-xs font-semibold text-destructive">
                       You entered {money(mine.declared_cents)} —{" "}
                       {money(mine.amount_due_cents - mine.declared_cents)} short, so it cannot be
@@ -155,13 +188,54 @@ export function RentStrip() {
       {counting && mine ? (
         <NoteCounterDialog
           title="What you are handing over"
-          description={`Your rent is ${money(mine.amount_due_cents)}. Enter how many of each note you are giving.`}
-          dueCents={mine.amount_due_cents}
+          description={
+            covers.length
+              ? `Your rent is ${money(mine.amount_due_cents)}, plus theirs — Yogi checks the total. Enter how many of each note you are giving.`
+              : `Your rent is ${money(mine.amount_due_cents)}. Enter how many of each note you are giving.`
+          }
+          // Compared with your own rent only when it is only yours; with someone
+          // else's in it the total is for the collector to check.
+          dueCents={covers.length ? undefined : mine.amount_due_cents}
           initialNotes={mine.declared_notes}
           confirmLabel="That's"
           onClose={() => setCounting(false)}
           onConfirm={(notes) => void declare(notes)}
-        />
+        >
+          {members.length > 1 ? (
+            <div>
+              <p className="text-sm font-bold">Also paying for</p>
+              <p className="text-xs text-muted-foreground">
+                Tick anyone whose rent is in this pile too.
+              </p>
+              <div className="mt-1.5 flex flex-wrap gap-1.5">
+                {members
+                  .filter((m) => m.user_id !== user?.id)
+                  .map((m) => {
+                    const on = covers.includes(m.user_id);
+                    return (
+                      <button
+                        key={m.user_id}
+                        type="button"
+                        onClick={() =>
+                          setCovers((list) =>
+                            on ? list.filter((id) => id !== m.user_id) : [...list, m.user_id],
+                          )
+                        }
+                        className={cn(
+                          "rounded-full px-3 py-1.5 text-xs font-bold",
+                          on
+                            ? "bg-primary text-primary-foreground"
+                            : "bg-surface-2 text-muted-foreground",
+                        )}
+                      >
+                        {m.name}
+                      </button>
+                    );
+                  })}
+              </div>
+            </div>
+          ) : null}
+        </NoteCounterDialog>
       ) : null}
     </section>
   );

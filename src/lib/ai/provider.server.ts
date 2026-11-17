@@ -26,6 +26,30 @@ export interface LlmProvider {
 const MAX_OUTPUT_TOKENS = 6000;
 
 /**
+ * The same ceiling for a video, which needs more of it.
+ *
+ * The current Gemini models think before answering and the thinking comes out
+ * of this budget. Watching a twenty-minute video and then writing every
+ * ingredient and step ran past 6000: the reply stopped mid-ingredient list and
+ * arrived as half a JSON object. At Flash prices the extra room is a few
+ * cents at most, and only spent when a video really needs it.
+ */
+const VIDEO_MAX_OUTPUT_TOKENS = 16000;
+
+/**
+ * Gemini's stop reasons in the vocabulary the rest of the app already reads.
+ *
+ * Gemini says MAX_TOKENS where OpenAI says "length"; without this a cut-off
+ * reply was logged as broken JSON instead of as running out of room.
+ */
+export function geminiFinishReason(reason: string | undefined): string {
+  if (!reason) return "";
+  if (reason === "MAX_TOKENS") return "length";
+  if (reason === "STOP") return "stop";
+  return reason.toLowerCase();
+}
+
+/**
  * How long one attempt gets before it is abandoned.
  *
  * The whole request has to finish inside the serverless function's budget, and
@@ -274,7 +298,7 @@ class GeminiVideoProvider implements VideoProvider {
 
     return {
       text: (candidate?.content?.parts ?? []).map((p) => p.text ?? "").join(""),
-      finishReason: candidate?.finishReason ?? "",
+      finishReason: geminiFinishReason(candidate?.finishReason),
       model,
       promptTokens: body.usageMetadata?.promptTokenCount ?? 0,
       completionTokens: body.usageMetadata?.candidatesTokenCount ?? 0,
@@ -303,7 +327,7 @@ class GeminiVideoProvider implements VideoProvider {
           ],
           generationConfig: {
             responseMimeType: "application/json",
-            maxOutputTokens: MAX_OUTPUT_TOKENS,
+            maxOutputTokens: VIDEO_MAX_OUTPUT_TOKENS,
             ...(lowResolution ? { mediaResolution: "MEDIA_RESOLUTION_LOW" } : {}),
           },
         }),
@@ -314,15 +338,17 @@ class GeminiVideoProvider implements VideoProvider {
 }
 
 /**
- * Current Gemini models that watch video, best first.
+ * Current Gemini models that watch video, in the order they are asked.
  *
- * 3.8 Flash is the strongest Flash model at following a cook's narration;
- * the two Flash-Lite models are cheaper and, being separate models, are not
- * busy at the same moment it is. Stable ids only — preview ids get shut down.
+ * 3.5 Flash-Lite first: in production the Flash models turned video calls
+ * down as "high demand" again and again, five to eight seconds a refusal,
+ * while Flash-Lite answered — and turning a cooking video into a recipe is
+ * well within it. 3.8 Flash is the stronger reader when it has room. Stable
+ * ids only — preview ids get shut down.
  */
 export const GEMINI_VIDEO_MODELS = [
-  "gemini-3.8-flash",
   "gemini-3.5-flash-lite",
+  "gemini-3.8-flash",
   "gemini-3.1-flash-lite",
 ];
 
@@ -422,7 +448,7 @@ class GeminiImageProvider implements ImageProvider {
 
     return {
       text: (candidate?.content?.parts ?? []).map((p) => p.text ?? "").join(""),
-      finishReason: candidate?.finishReason ?? "",
+      finishReason: geminiFinishReason(candidate?.finishReason),
       model: this.model,
       promptTokens: body.usageMetadata?.promptTokenCount ?? 0,
       completionTokens: body.usageMetadata?.candidatesTokenCount ?? 0,

@@ -158,14 +158,18 @@ export const scanReceipt = createServerFn({ method: "POST" })
       return { ok: false, refusal: "invalid_output" };
     }
 
-    let payload: unknown;
-    try {
-      payload = JSON.parse(completion.text);
-    } catch {
-      await record("bad_json");
-      console.error(`[ai] unparseable receipt reply: ${completion.text.slice(0, 400)}`);
+    const { parseJsonReply, describeReply } = await import("@/lib/ai/json-reply");
+    const parsed = parseJsonReply(completion.text);
+    if (!parsed.ok) {
+      await record(completion.finishReason === "length" ? "out_of_budget" : "bad_json");
+      console.error(
+        `[ai] unparseable receipt reply from ${completion.model} (finish_reason: ${
+          completion.finishReason || "unknown"
+        }): ${describeReply(completion.text)}`,
+      );
       return { ok: false, refusal: "invalid_output" };
     }
+    const payload = parsed.value;
 
     const result = parseReceiptOutput(payload, data.listNames);
     if (!result) {

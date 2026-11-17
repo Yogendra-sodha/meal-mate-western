@@ -168,16 +168,22 @@ export const importRecipe = createServerFn({ method: "POST" })
       return { ok: false, refusal: "invalid_output" };
     }
 
-    let payload: unknown;
-    try {
-      payload = JSON.parse(completion.text);
-    } catch {
+    const { parseJsonReply, describeReply } = await import("@/lib/ai/json-reply");
+    const parsed = parseJsonReply(completion.text);
+    if (!parsed.ok) {
       // The specific outcome is what the admin log shows, so a future failure
-      // names itself instead of being one undifferentiated "malformed".
-      await record("bad_json");
-      console.error(`[ai] unparseable reply: ${completion.text.slice(0, 400)}`);
+      // names itself instead of being one undifferentiated "malformed". A reply
+      // that ran out of room is told apart from one that was simply garbled.
+      const cutOff = completion.finishReason === "length";
+      await record(cutOff ? "out_of_budget" : "bad_json");
+      console.error(
+        `[ai] unparseable reply from ${completion.model} (finish_reason: ${
+          completion.finishReason || "unknown"
+        }, ${completion.completionTokens} tokens): ${describeReply(completion.text)}`,
+      );
       return { ok: false, refusal: "invalid_output" };
     }
+    const payload = parsed.value;
 
     const result = parseModelOutput(payload);
     if (!result) {

@@ -203,21 +203,55 @@ export interface VideoProvider {
  * either way.
  */
 class GeminiVideoProvider implements VideoProvider {
+  readonly model: string;
+
   constructor(
     private readonly apiKey: string,
-    readonly model: string,
-  ) {}
+    /** tried in order; the first is the one named in settings */
+    private readonly models: string[],
+  ) {
+    this.model = models[0]!;
+  }
 
+  /**
+   * Asks each model in turn, moving on only when one is busy or gone.
+   *
+   * "Experiencing high demand" is Google running out of room for one model,
+   * not a problem with the key or the video, and it can last for hours — so
+   * asking that model again achieves nothing, while a sibling model is
+   * usually free. A model that no longer exists (an old id left in settings)
+   * is skipped the same way. A timeout is not: the time is already spent.
+   */
   async completeFromVideo(system: string, youtubeUrl: string): Promise<CompletionResult> {
+    let lastError: unknown;
+    for (const model of this.models) {
+      try {
+        return await this.attempt(model, system, youtubeUrl);
+      } catch (error) {
+        lastError = error;
+        const { status } = error as { status?: number };
+        const skippable = status === 404 || (status !== 504 && isBusyError(error));
+        if (!skippable) throw error;
+        console.warn(`[ai] ${model} could not take the video (${status}), trying the next model`);
+      }
+    }
+    throw lastError;
+  }
+
+  private async attempt(
+    model: string,
+    system: string,
+    youtubeUrl: string,
+  ): Promise<CompletionResult> {
     // Low media resolution samples the frames coarsely, which is a third of
     // the token cost. A cook's spoken narration is where the amounts are, and
     // the audio track is charged the same at either setting.
-    let response = await this.post(system, youtubeUrl, true);
+    let response = await this.post(model, system, youtubeUrl, true);
     if (!response.ok) {
       const detail = await response.clone().text();
       // Older or differently-configured endpoints reject the field outright.
       if (/mediaResolution|media_resolution/i.test(detail)) {
-        response = await this.post(system, youtubeUrl, false);
+        response = await this.post(model, system, youtubeUrl, false);
       }
     }
 
@@ -241,16 +275,16 @@ class GeminiVideoProvider implements VideoProvider {
     return {
       text: (candidate?.content?.parts ?? []).map((p) => p.text ?? "").join(""),
       finishReason: candidate?.finishReason ?? "",
-      model: this.model,
+      model,
       promptTokens: body.usageMetadata?.promptTokenCount ?? 0,
       completionTokens: body.usageMetadata?.candidatesTokenCount ?? 0,
     };
   }
 
-  private post(system: string, youtubeUrl: string, lowResolution: boolean) {
+  private post(model: string, system: string, youtubeUrl: string, lowResolution: boolean) {
     const base = process.env["GEMINI_BASE_URL"] ?? "https://generativelanguage.googleapis.com";
     return fetchWithTimeout(
-      `${base.replace(/\/$/, "")}/v1beta/models/${this.model}:generateContent`,
+      `${base.replace(/\/$/, "")}/v1beta/models/${model}:generateContent`,
       {
         method: "POST",
         headers: { "content-type": "application/json", "x-goog-api-key": this.apiKey },
@@ -279,12 +313,39 @@ class GeminiVideoProvider implements VideoProvider {
   }
 }
 
+/**
+ * Current Gemini models that watch video, best first.
+ *
+ * 3.8 Flash is the strongest Flash model at following a cook's narration;
+ * the two Flash-Lite models are cheaper and, being separate models, are not
+ * busy at the same moment it is. Stable ids only — preview ids get shut down.
+ */
+export const GEMINI_VIDEO_MODELS = [
+  "gemini-3.8-flash",
+  "gemini-3.5-flash-lite",
+  "gemini-3.1-flash-lite",
+];
+
+/**
+ * The models to try, the configured one first and the defaults after it.
+ *
+ * GEMINI_MODEL may hold several ids separated by commas. Whatever it holds,
+ * the defaults still follow, so an outdated id in settings slows a request
+ * down by one refusal rather than breaking every one.
+ */
+export function geminiVideoModels(configured = process.env["GEMINI_MODEL"]): string[] {
+  const named = (configured ?? "")
+    .split(",")
+    .map((id) => id.trim())
+    .filter(Boolean);
+  return [...new Set([...named, ...GEMINI_VIDEO_MODELS])];
+}
+
 /** Builds the video provider, or null when no Gemini key is configured. */
 export function getVideoProvider(): VideoProvider | null {
   const apiKey = process.env["GEMINI_API_KEY"];
   if (!apiKey) return null;
-  const model = process.env["GEMINI_MODEL"] ?? "gemini-3.1-flash-lite";
-  return new GeminiVideoProvider(apiKey, model);
+  return new GeminiVideoProvider(apiKey, geminiVideoModels());
 }
 
 /** A model that can read a photograph. */
@@ -481,8 +542,11 @@ function buildImageProvider(choice: ImageProviderChoice): ImageProvider | null {
   if (choice === "gemini") {
     const key = process.env["GEMINI_API_KEY"];
     if (!key) return null;
+    // First id only: GEMINI_MODEL may list several for the video fallback.
     const model =
-      process.env["GEMINI_IMAGE_MODEL"] ?? process.env["GEMINI_MODEL"] ?? "gemini-3.1-flash-lite";
+      process.env["GEMINI_IMAGE_MODEL"]?.trim() ||
+      geminiVideoModels()[0] ||
+      "gemini-3.1-flash-lite";
     return new GeminiImageProvider(key, model);
   }
   const key = process.env["AI_API_KEY"] ?? process.env["OPENAI_API_KEY"];

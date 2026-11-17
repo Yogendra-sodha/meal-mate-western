@@ -159,7 +159,9 @@ export const scanReceipt = createServerFn({ method: "POST" })
     }
 
     const { parseJsonReply, describeReply } = await import("@/lib/ai/json-reply");
-    const parsed = parseJsonReply(completion.text);
+    const parsed = parseJsonReply(completion.text, {
+      complete: completion.finishReason !== "length",
+    });
     if (!parsed.ok) {
       await record(completion.finishReason === "length" ? "out_of_budget" : "bad_json");
       console.error(

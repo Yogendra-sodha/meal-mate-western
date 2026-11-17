@@ -169,7 +169,9 @@ export const importRecipe = createServerFn({ method: "POST" })
     }
 
     const { parseJsonReply, describeReply } = await import("@/lib/ai/json-reply");
-    const parsed = parseJsonReply(completion.text);
+    const parsed = parseJsonReply(completion.text, {
+      complete: completion.finishReason !== "length",
+    });
     if (!parsed.ok) {
       // The specific outcome is what the admin log shows, so a future failure
       // names itself instead of being one undifferentiated "malformed". A reply

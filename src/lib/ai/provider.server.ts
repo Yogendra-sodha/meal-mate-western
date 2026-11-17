@@ -221,10 +221,10 @@ export interface VideoProvider {
  * this one is handed a URL it fetches and watches itself, and is billed by the
  * video's duration rather than by the length of a prompt.
  *
- * No response schema is sent — only `application/json`. Gemini's schema
- * dialect differs from OpenAI's, and a mismatch there fails the whole call,
- * while the validation that actually protects the app runs on the reply
- * either way.
+ * The recipe schema is sent as `responseJsonSchema`, which current models
+ * honour; one that rejects it is asked again with `application/json` alone,
+ * and the validation that actually protects the app runs on the reply either
+ * way.
  */
 class GeminiVideoProvider implements VideoProvider {
   readonly model: string;
@@ -270,13 +270,24 @@ class GeminiVideoProvider implements VideoProvider {
     // Low media resolution samples the frames coarsely, which is a third of
     // the token cost. A cook's spoken narration is where the amounts are, and
     // the audio track is charged the same at either setting.
-    let response = await this.post(model, system, youtubeUrl, true);
-    if (!response.ok) {
+    //
+    // The recipe's exact shape is sent as a schema, which makes Gemini write
+    // valid JSON of that shape instead of merely trying to: without it a reply
+    // came back with its tags list numbered `0: "...", 1: "..."` and its last
+    // brace missing. A model that will not take the schema, or the low
+    // resolution, says so with a 400 before doing any work, and is asked again
+    // without whichever it refused.
+    let options = { lowResolution: true, schema: true };
+    let response = await this.post(model, system, youtubeUrl, options);
+    for (let retry = 0; retry < 2 && response.status === 400; retry++) {
       const detail = await response.clone().text();
-      // Older or differently-configured endpoints reject the field outright.
-      if (/mediaResolution|media_resolution/i.test(detail)) {
-        response = await this.post(model, system, youtubeUrl, false);
-      }
+      if (options.lowResolution && /mediaResolution|media_resolution/i.test(detail)) {
+        options = { ...options, lowResolution: false };
+      } else if (options.schema) {
+        options = { ...options, schema: false };
+      } else break;
+      console.warn(`[ai] ${model} refused part of the request, asking again without it`);
+      response = await this.post(model, system, youtubeUrl, options);
     }
 
     if (!response.ok) {
@@ -305,7 +316,12 @@ class GeminiVideoProvider implements VideoProvider {
     };
   }
 
-  private post(model: string, system: string, youtubeUrl: string, lowResolution: boolean) {
+  private post(
+    model: string,
+    system: string,
+    youtubeUrl: string,
+    { lowResolution, schema }: { lowResolution: boolean; schema: boolean },
+  ) {
     const base = process.env["GEMINI_BASE_URL"] ?? "https://generativelanguage.googleapis.com";
     return fetchWithTimeout(
       `${base.replace(/\/$/, "")}/v1beta/models/${model}:generateContent`,
@@ -328,6 +344,7 @@ class GeminiVideoProvider implements VideoProvider {
           generationConfig: {
             responseMimeType: "application/json",
             maxOutputTokens: VIDEO_MAX_OUTPUT_TOKENS,
+            ...(schema ? { responseJsonSchema: RECIPE_JSON_SCHEMA } : {}),
             ...(lowResolution ? { mediaResolution: "MEDIA_RESOLUTION_LOW" } : {}),
           },
         }),
